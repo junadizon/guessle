@@ -368,91 +368,45 @@ async def start_guessle(interaction: discord.Interaction):
 @bot.tree.command(name="guess", description="Make a guess in your current game")
 @app_commands.describe(word="Enter a 5-letter word")
 async def guess_word(interaction: discord.Interaction, word: str):
-    guessed_word = word.lower()
-
-    if len(guessed_word) != 5:
-        await interaction.response.send_message("❌ Invalid word. Make sure it's 5 letters.", ephemeral=True)
+    if interaction.user.id not in user_games:
+        await interaction.response.send_message("You don't have an active game! Start one with `/guessle`.")
         return
 
-    # Check if the word exists in the dictionary
-    if not await is_valid_word(guessed_word):
-        await interaction.response.send_message("❌ That's not a valid English word. Try another word!", ephemeral=True)
+    word = word.lower()
+    if len(word) != 5:
+        await interaction.response.send_message("Please enter a 5-letter word!")
         return
 
-    game = user_games.get(interaction.user.id)
-    if not game:
-        await interaction.response.send_message("You haven't started a game yet. Use `/guessle` to start one.", ephemeral=True)
+    if not await is_valid_word(word):
+        await interaction.response.send_message("That's not a valid word! Try again.")
         return
 
+    game = user_games[interaction.user.id]
+    correct = game["word"]
     game["attempts"] += 1
-    feedback = get_feedback(guessed_word, game["word"], show_word=True)  # Show word in private feedback
+    game["guesses"].append(word)
 
-    # Store the guess and feedback
-    game["guesses"].append((guessed_word, feedback))
+    feedback = get_feedback(word, correct)
+    await interaction.response.send_message(feedback)
 
-    # Send private feedback for this guess
-    await interaction.response.send_message(
-        f"Attempt {game['attempts']} of 6:\n{feedback}",
-        ephemeral=True
-    )
-
-    if guessed_word == game["word"]:
+    if word == correct:
+        # Update database when user wins
         print(f"User {interaction.user.id} won the game!")
-        # Update user stats when they win
         user_stats.add_game(str(interaction.user.id), True)
 
-        # Create public message with only colored boxes
-        public_message = f"🎉 {interaction.user.name} has won Guessle!\n\n"
-        for i, (guess, fb) in enumerate(game["guesses"], 1):
-            public_message += f"{get_feedback(guess, game['word'], show_word=False)}\n"
-        public_message += f"\nGuessed the word in {game['attempts']} attempts!"
-
-        # Create private message with the word
-        private_message = f"🎉 You won Guessle!\n\n"
-        for i, (guess, fb) in enumerate(game["guesses"], 1):
-            private_message += f"{fb}\n"
-        private_message += f"\nThe word was `{game['word'].upper()}`"
-
-        await interaction.followup.send(public_message)
-        await interaction.followup.send(private_message, ephemeral=True)
-
-        active_games.remove(interaction.user.id)
+        # Rest of the win logic
         del user_games[interaction.user.id]
-
-        # Update activity if no more active games
-        if not active_games:
-            await bot.change_presence(
-                activity=discord.Activity(
-                    type=discord.ActivityType.playing,
-                    name="Guessle | /help"
-                )
-            )
+        active_games.remove(interaction.user.id)
+        await interaction.followup.send(f"🎉 Congratulations! You guessed the word in {game['attempts']} attempts!")
     elif game["attempts"] >= 6:
-        # Create public message with only colored boxes
-        public_message = f"❌ {interaction.user.name} has lost Guessle!\n\n"
-        for i, (guess, fb) in enumerate(game["guesses"], 1):
-            public_message += f"{get_feedback(guess, game['word'], show_word=False)}\n"
+        # Update database when user loses
+        print(f"User {interaction.user.id} lost the game!")
+        user_stats.add_game(str(interaction.user.id), False)
 
-        # Create private message with the word
-        private_message = f"❌ You lost Guessle!\n\n"
-        for i, (guess, fb) in enumerate(game["guesses"], 1):
-            private_message += f"{fb}\n"
-        private_message += f"\nThe word was `{game['word'].upper()}`"
-
-        await interaction.followup.send(public_message)
-        await interaction.followup.send(private_message, ephemeral=True)
-
-        active_games.remove(interaction.user.id)
+        # Rest of the loss logic
         del user_games[interaction.user.id]
-
-        # Update activity if no more active games
-        if not active_games:
-            await bot.change_presence(
-                activity=discord.Activity(
-                    type=discord.ActivityType.playing,
-                    name="Guessle | /help"
-                )
-            )
+        active_games.remove(interaction.user.id)
+        await interaction.followup.send(f"Game over! The word was `{correct.upper()}`.")
 
 @bot.tree.command(name="status", description="Check your current game status")
 async def game_status(interaction: discord.Interaction):
@@ -472,28 +426,19 @@ async def game_status(interaction: discord.Interaction):
 @bot.tree.command(name="giveup", description="End your current game and reveal the word")
 async def give_up(interaction: discord.Interaction):
     if interaction.user.id not in user_games:
-        await interaction.response.send_message("You don't have an active game to give up!", ephemeral=True)
+        await interaction.response.send_message("You don't have an active game!")
         return
 
     game = user_games[interaction.user.id]
+    correct = game["word"]
+
+    # Update database when user gives up
     print(f"User {interaction.user.id} gave up the game")
-    # Update games played even when giving up
     user_stats.add_game(str(interaction.user.id), False)
 
-    # Create public message with only colored boxes
-    public_message = f"🏳️ {interaction.user.name} has given up on Guessle!\n\n"
-    for i, (guess, fb) in enumerate(game["guesses"], 1):
-        public_message += f"{get_feedback(guess, game['word'], show_word=False)}\n"
-
-    # Create private message with the word
-    private_message = f"🏳️ You gave up on Guessle!\n\n"
-    for i, (guess, fb) in enumerate(game["guesses"], 1):
-        private_message += f"{fb}\n"
-    private_message += f"\nThe word was `{game['word'].upper()}`"
-
-    await interaction.response.send_message(public_message)
-    await interaction.followup.send(private_message, ephemeral=True)
     del user_games[interaction.user.id]
+    active_games.remove(interaction.user.id)
+    await interaction.response.send_message(f"You gave up! The word was `{correct.upper()}`.")
 
 @bot.tree.command(name="help", description="Shows all available commands and how to use them")
 async def help_command(interaction: discord.Interaction):
