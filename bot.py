@@ -338,9 +338,10 @@ def get_feedback(guess, correct, show_word=True, use_custom_emojis=False):
                     feedback[i] = "⬛"  # Gray - letter not in word
 
     if use_custom_emojis:
-        # Convert emoji names to actual emojis
+        # Convert emoji names to actual emojis and join with spaces
         result = " ".join(EMOJI_MAP.get(emoji, emoji) for emoji in feedback)
     else:
+        # Join with spaces for colored boxes
         result = " ".join(feedback)
 
     if show_word:
