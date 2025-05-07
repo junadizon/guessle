@@ -8,6 +8,7 @@ import asyncio
 from aiohttp import web
 import threading
 from spellchecker import SpellChecker
+import json
 
 # Load token from .env
 load_dotenv()
@@ -21,6 +22,33 @@ intents.members = True  # Required for role management
 
 # Initialize spell checker
 spell = SpellChecker()
+
+# Emoji mapping
+EMOJI_MAP = {}
+
+async def load_emojis(guild):
+    """Load emoji IDs from a JSON file or create it if it doesn't exist."""
+    global EMOJI_MAP
+    try:
+        with open('emoji_map.json', 'r') as f:
+            EMOJI_MAP = json.load(f)
+    except FileNotFoundError:
+        # Create emoji map if it doesn't exist
+        EMOJI_MAP = {}
+        for color in ['green', 'yellow', 'gray']:
+            for letter in 'abcdefghijklmnopqrstuvwxyz':
+                emoji_path = f'emojis/{color}/{color}_{letter}.png'
+                if os.path.exists(emoji_path):
+                    with open(emoji_path, 'rb') as f:
+                        emoji = await guild.create_custom_emoji(
+                            name=f'{color}_{letter}',
+                            image=f.read()
+                        )
+                        EMOJI_MAP[f'{color}_{letter}'] = str(emoji)
+
+        # Save the emoji map
+        with open('emoji_map.json', 'w') as f:
+            json.dump(EMOJI_MAP, f)
 
 # Common 5-letter words for random selection
 COMMON_WORDS = [
@@ -114,6 +142,10 @@ class GuessleBot(commands.Bot):
         await site.start()
         print(f"Web server started on port {PORT}")
 
+        # Load emojis for each guild the bot is in
+        for guild in self.guilds:
+            await load_emojis(guild)
+
         # Sync commands with Discord
         try:
             synced = await self.tree.sync()
@@ -146,6 +178,10 @@ class GuessleBot(commands.Bot):
             )
         )
 
+    async def on_guild_join(self, guild):
+        """Load emojis when joining a new guild."""
+        await load_emojis(guild)
+
 bot = GuessleBot()
 
 # Track active games for rich presence
@@ -157,14 +193,15 @@ def get_random_word():
 
 user_games = {}
 
-def get_feedback(guess, correct):
+def get_feedback(guess, correct, show_word=True):
     feedback = []
     correct_list = list(correct)
 
     # First pass: mark correct positions
     for i in range(5):
         if guess[i] == correct[i]:
-            feedback.append(f"🟩 {guess[i].upper()}")  # Green - correct position
+            emoji_id = EMOJI_MAP.get(f'green_{guess[i]}', f'green_{guess[i]}')
+            feedback.append(f"<:{emoji_id}>")  # Green - correct position
             correct_list[i] = None  # Mark as used
         else:
             feedback.append(None)
@@ -173,12 +210,17 @@ def get_feedback(guess, correct):
     for i in range(5):
         if feedback[i] is None:  # If not already marked as correct
             if guess[i] in correct_list:
-                feedback[i] = f"🟨 {guess[i].upper()}"  # Yellow - correct letter, wrong position
+                emoji_id = EMOJI_MAP.get(f'yellow_{guess[i]}', f'yellow_{guess[i]}')
+                feedback[i] = f"<:{emoji_id}>"  # Yellow - correct letter, wrong position
                 correct_list[correct_list.index(guess[i])] = None  # Mark as used
             else:
-                feedback[i] = f"⬛ {guess[i].upper()}"  # Gray - letter not in word
+                emoji_id = EMOJI_MAP.get(f'gray_{guess[i]}', f'gray_{guess[i]}')
+                feedback[i] = f"<:{emoji_id}>"  # Gray - letter not in word
 
-    return " ".join(feedback)
+    result = " ".join(feedback)
+    if show_word:
+        result += f" - `{guess.upper()}`"
+    return result
 
 async def is_valid_word(word: str) -> bool:
     """Check if a word exists using pyspellchecker."""
@@ -218,37 +260,50 @@ async def guess_word(interaction: discord.Interaction, word: str):
     guessed_word = word.lower()
 
     if len(guessed_word) != 5:
-        await interaction.response.send_message("❌ Invalid word. Make sure it's 5 letters.")
+        await interaction.response.send_message("❌ Invalid word. Make sure it's 5 letters.", ephemeral=True)
         return
 
     # Check if the word exists in the dictionary
     if not await is_valid_word(guessed_word):
-        await interaction.response.send_message("❌ That's not a valid English word. Try another word!")
+        await interaction.response.send_message("❌ That's not a valid English word. Try another word!", ephemeral=True)
         return
 
     game = user_games.get(interaction.user.id)
     if not game:
-        await interaction.response.send_message("You haven't started a game yet. Use `/guessle` to start one.")
+        await interaction.response.send_message("You haven't started a game yet. Use `/guessle` to start one.", ephemeral=True)
         return
 
     game["attempts"] += 1
-    feedback = get_feedback(guessed_word, game["word"])
+    feedback = get_feedback(guessed_word, game["word"], show_word=True)  # Show word in private feedback
 
     # Store the guess and feedback
     game["guesses"].append((guessed_word, feedback))
 
-    # Create message with all attempts
-    message = ""
-    for i, (guess, fb) in enumerate(game["guesses"], 1):
-        message += f"{fb} - `{guess.upper()}`\n"
-    message += f"\nYou're on attempt {game['attempts']} of 6."
-
-    await interaction.response.send_message(message)
+    # Send private feedback for this guess
+    await interaction.response.send_message(
+        f"Attempt {game['attempts']} of 6:\n{feedback}",
+        ephemeral=True
+    )
 
     if guessed_word == game["word"]:
-        await interaction.followup.send(f"✅ Congrats! You guessed the word in {game['attempts']} attempts!")
+        # Create public message with only colored boxes
+        public_message = f"🎉 {interaction.user.name} has won Guessle!\n\n"
+        for i, (guess, fb) in enumerate(game["guesses"], 1):
+            public_message += f"Attempt {i}: {get_feedback(guess, game['word'], show_word=False)}\n"
+        public_message += f"\nGuessed the word in {game['attempts']} attempts!"
+
+        # Create private message with the word
+        private_message = f"🎉 You won Guessle!\n\n"
+        for i, (guess, fb) in enumerate(game["guesses"], 1):
+            private_message += f"Attempt {i}: {fb}\n"
+        private_message += f"\nThe word was `{game['word'].upper()}`"
+
+        await interaction.followup.send(public_message)
+        await interaction.followup.send(private_message, ephemeral=True)
+
         active_games.remove(interaction.user.id)
         del user_games[interaction.user.id]
+
         # Update activity if no more active games
         if not active_games:
             await bot.change_presence(
@@ -258,9 +313,23 @@ async def guess_word(interaction: discord.Interaction, word: str):
                 )
             )
     elif game["attempts"] >= 6:
-        await interaction.followup.send(f"❌ Out of tries! The word was `{game['word'].upper()}`.")
+        # Create public message with only colored boxes
+        public_message = f"❌ {interaction.user.name} has lost Guessle!\n\n"
+        for i, (guess, fb) in enumerate(game["guesses"], 1):
+            public_message += f"Attempt {i}: {get_feedback(guess, game['word'], show_word=False)}\n"
+
+        # Create private message with the word
+        private_message = f"❌ You lost Guessle!\n\n"
+        for i, (guess, fb) in enumerate(game["guesses"], 1):
+            private_message += f"Attempt {i}: {fb}\n"
+        private_message += f"\nThe word was `{game['word'].upper()}`"
+
+        await interaction.followup.send(public_message)
+        await interaction.followup.send(private_message, ephemeral=True)
+
         active_games.remove(interaction.user.id)
         del user_games[interaction.user.id]
+
         # Update activity if no more active games
         if not active_games:
             await bot.change_presence(
@@ -274,26 +343,38 @@ async def guess_word(interaction: discord.Interaction, word: str):
 async def game_status(interaction: discord.Interaction):
     game = user_games.get(interaction.user.id)
     if not game:
-        await interaction.response.send_message("You don't have an active game. Use `/guessle` to start one!")
+        await interaction.response.send_message("You don't have an active game. Use `/guessle` to start one!", ephemeral=True)
         return
 
-    # Show all previous attempts
-    message = ""
+    # Show all previous attempts privately
+    message = "Your current game status:\n\n"
     for i, (guess, fb) in enumerate(game["guesses"], 1):
-        message += f"{fb} - `{guess.upper()}`\n"
+        message += f"Attempt {i}: {fb}\n"
     message += f"\nYou're on attempt {game['attempts']} of 6."
 
-    await interaction.response.send_message(message)
+    await interaction.response.send_message(message, ephemeral=True)
 
 @bot.tree.command(name="giveup", description="End your current game and reveal the word")
 async def give_up(interaction: discord.Interaction):
     if interaction.user.id not in user_games:
-        await interaction.response.send_message("You don't have an active game to give up!")
+        await interaction.response.send_message("You don't have an active game to give up!", ephemeral=True)
         return
 
-    word = user_games[interaction.user.id]["word"]
+    game = user_games[interaction.user.id]
+    # Create public message with only colored boxes
+    public_message = f"🏳️ {interaction.user.name} has given up on Guessle!\n\n"
+    for i, (guess, fb) in enumerate(game["guesses"], 1):
+        public_message += f"Attempt {i}: {get_feedback(guess, game['word'], show_word=False)}\n"
+
+    # Create private message with the word
+    private_message = f"🏳️ You gave up on Guessle!\n\n"
+    for i, (guess, fb) in enumerate(game["guesses"], 1):
+        private_message += f"Attempt {i}: {fb}\n"
+    private_message += f"\nThe word was `{game['word'].upper()}`"
+
+    await interaction.response.send_message(public_message)
+    await interaction.followup.send(private_message, ephemeral=True)
     del user_games[interaction.user.id]
-    await interaction.response.send_message(f"Game ended. The word was `{word.upper()}`.")
 
 @bot.tree.command(name="help", description="Shows all available commands and how to use them")
 async def help_command(interaction: discord.Interaction):
