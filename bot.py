@@ -27,7 +27,91 @@ intents.members = True  # Required for role management
 spell = SpellChecker()
 
 # Emoji mapping
-EMOJI_MAP = {}
+EMOJI_MAP = {
+    # Yellow emojis
+    'yellow_a': '<:yellow_a:1369662416857858088>',
+    'yellow_b': '<:yellow_b:1369662427796476078>',
+    'yellow_c': '<:yellow_c:1369662439431471165>',
+    'yellow_d': '<:yellow_d:1369662450458300557>',
+    'yellow_e': '<:yellow_e:1369662461438988309>',
+    'yellow_f': '<:yellow_f:1369662473069920367>',
+    'yellow_g': '<:yellow_g:1369662483131793458>',
+    'yellow_h': '<:yellow_h:1369662495719165962>',
+    'yellow_i': '<:yellow_i:1369662505365803018>',
+    'yellow_j': '<:yellow_j:1369662515314950244>',
+    'yellow_k': '<:yellow_k:1369662525834268825>',
+    'yellow_l': '<:yellow_l:1369662537712271490>',
+    'yellow_m': '<:yellow_m:1369662556356087921>',
+    'yellow_n': '<:yellow_n:1369662566166691851>',
+    'yellow_o': '<:yellow_o:1369662576425697402>',
+    'yellow_p': '<:yellow_p:1369662585594577037>',
+    'yellow_q': '<:yellow_q:1369662595862102046>',
+    'yellow_r': '<:yellow_r:1369662608000417832>',
+    'yellow_s': '<:yellow_s:1369662618129928262>',
+    'yellow_t': '<:yellow_t:1369662627135098990>',
+    'yellow_u': '<:yellow_u:1369662637989826610>',
+    'yellow_v': '<:yellow_v:1369662647859019796>',
+    'yellow_w': '<:yellow_w:1369662659242491984>',
+    'yellow_x': '<:yellow_x:1369662682667548672>',
+    'yellow_y': '<:yellow_y:1369662697011937421>',
+    'yellow_z': '<:yellow_z:1369662708252676186>',
+
+    # Green emojis
+    'green_a': '<:green_a:1369661679494762637>',
+    'green_b': '<:green_b:1369661689363955833>',
+    'green_c': '<:green_c:1369661700952948766>',
+    'green_d': '<:green_d:1369661711719862343>',
+    'green_e': '<:green_e:1369661721274220584>',
+    'green_f': '<:green_f:1369661853478948915>',
+    'green_g': '<:green_g:1369661862655955035>',
+    'green_h': '<:green_h:1369661873452220456>',
+    'green_i': '<:green_i:1369661882998329444>',
+    'green_j': '<:green_j:1369661891625877605>',
+    'green_k': '<:green_k:1369661901004472391>',
+    'green_l': '<:green_l:1369661909967831101>',
+    'green_m': '<:green_m:1369661918822010892>',
+    'green_n': '<:green_n:1369661928703655946>',
+    'green_o': '<:green_o:1369661938493292665>',
+    'green_p': '<:green_p:1369661947380895844>',
+    'green_q': '<:green_q:1369661959196246036>',
+    'green_r': '<:green_r:1369661969669292163>',
+    'green_s': '<:green_s:1369661979840614471>',
+    'green_t': '<:green_t:1369661991358173215>',
+    'green_u': '<:green_u:1369662036790739065>',
+    'green_v': '<:green_v:1369662046844489758>',
+    'green_w': '<:green_w:1369662056416018462>',
+    'green_x': '<:green_x:1369662066767564932>',
+    'green_y': '<:green_y:1369662076041298111>',
+    'green_z': '<:green_z:1369662086283657236>',
+
+    # Gray emojis
+    'gray_a': '<:gray_a:1369661251235479552>',
+    'gray_b': '<:gray_b:1369661303068692490>',
+    'gray_c': '<:gray_c:1369661314355433594>',
+    'gray_d': '<:gray_d:1369661337965301760>',
+    'gray_e': '<:gray_e:1369661352221868236>',
+    'gray_f': '<:gray_f:1369661377265795082>',
+    'gray_g': '<:gray_g:1369661387940302949>',
+    'gray_h': '<:gray_h:1369661400955486300>',
+    'gray_i': '<:gray_i:1369661411734585364>',
+    'gray_j': '<:gray_j:1369661422681722973>',
+    'gray_k': '<:gray_k:1369661435780534343>',
+    'gray_l': '<:gray_l:1369661446488592475>',
+    'gray_m': '<:gray_m:1369661457217749082>',
+    'gray_n': '<:gray_n:1369661467909029919>',
+    'gray_o': '<:gray_o:1369661476834644009>',
+    'gray_p': '<:gray_p:1369661485785284649>',
+    'gray_q': '<:gray_q:1369661495528525905>',
+    'gray_r': '<:gray_r:1369661506517729371>',
+    'gray_s': '<:gray_s:1369661516076421240>',
+    'gray_t': '<:gray_t:1369661526230827164>',
+    'gray_u': '<:gray_u:1369661536171196466>',
+    'gray_v': '<:gray_v:1369661545432350921>',
+    'gray_w': '<:gray_w:1369661614873247775>',
+    'gray_x': '<:gray_x:1369661622658011146>',
+    'gray_y': '<:gray_y:1369661633667924068>',
+    'gray_z': '<:gray_z:1369661643298177097>'
+}
 
 async def load_emojis(guild):
     """Load emoji IDs from a JSON file or create it if it doesn't exist."""
@@ -333,29 +417,29 @@ def get_feedback(guess, correct, show_word=True, use_custom_emojis=False):
         if guess[i] == correct[i]:
             if use_custom_emojis:
                 emoji_key = f"green_{guess[i]}"
-                feedback.append(EMOJI_MAP.get(emoji_key, "🟩"))  # Use actual emoji ID
+                feedback.append(EMOJI_MAP.get(emoji_key, "🟩"))
             else:
-                feedback.append("🟩")  # Green - correct position
-            correct_list[i] = None  # Mark as used
+                feedback.append("🟩")
+            correct_list[i] = None
         else:
             feedback.append(None)
 
     # Second pass: mark correct letters in wrong positions
     for i in range(5):
-        if feedback[i] is None:  # If not already marked as correct
+        if feedback[i] is None:
             if guess[i] in correct_list:
                 if use_custom_emojis:
                     emoji_key = f"yellow_{guess[i]}"
-                    feedback[i] = EMOJI_MAP.get(emoji_key, "🟨")  # Use actual emoji ID
+                    feedback[i] = EMOJI_MAP.get(emoji_key, "🟨")
                 else:
-                    feedback[i] = "🟨"  # Yellow - correct letter, wrong position
-                correct_list[correct_list.index(guess[i])] = None  # Mark as used
+                    feedback[i] = "🟨"
+                correct_list[correct_list.index(guess[i])] = None
             else:
                 if use_custom_emojis:
                     emoji_key = f"gray_{guess[i]}"
-                    feedback[i] = EMOJI_MAP.get(emoji_key, "⬛")  # Use actual emoji ID
+                    feedback[i] = EMOJI_MAP.get(emoji_key, "⬛")
                 else:
-                    feedback[i] = "⬛"  # Gray - letter not in word
+                    feedback[i] = "⬛"
 
     # Join with spaces
     result = " ".join(feedback)
