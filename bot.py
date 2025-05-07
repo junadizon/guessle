@@ -164,7 +164,7 @@ def get_feedback(guess, correct):
     # First pass: mark correct positions
     for i in range(5):
         if guess[i] == correct[i]:
-            feedback.append(f"🟢 {guess[i].upper()}")  # Green - correct position
+            feedback.append(f"🟩 {guess[i].upper()}")  # Green - correct position
             correct_list[i] = None  # Mark as used
         else:
             feedback.append(None)
@@ -173,10 +173,10 @@ def get_feedback(guess, correct):
     for i in range(5):
         if feedback[i] is None:  # If not already marked as correct
             if guess[i] in correct_list:
-                feedback[i] = f"🟡 {guess[i].upper()}"  # Yellow - correct letter, wrong position
+                feedback[i] = f"🟨 {guess[i].upper()}"  # Yellow - correct letter, wrong position
                 correct_list[correct_list.index(guess[i])] = None  # Mark as used
             else:
-                feedback[i] = f"⚫ {guess[i].upper()}"  # Gray - letter not in word
+                feedback[i] = f"⬛ {guess[i].upper()}"  # Gray - letter not in word
 
     return " ".join(feedback)
 
@@ -280,7 +280,7 @@ async def game_status(interaction: discord.Interaction):
     # Show all previous attempts
     message = ""
     for i, (guess, fb) in enumerate(game["guesses"], 1):
-        message += f"Attempt {i}: `{guess.upper()}` -> {fb}\n"
+        message += f"{fb} - `{guess.upper()}`\n"
     message += f"\nYou're on attempt {game['attempts']} of 6."
 
     await interaction.response.send_message(message)
