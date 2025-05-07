@@ -10,6 +10,8 @@ import threading
 from spellchecker import SpellChecker
 import json
 import datetime
+import psycopg2
+from psycopg2.extras import DictCursor
 
 # Load token from .env
 load_dotenv()
@@ -120,30 +122,98 @@ COMMON_WORDS = [
     "would", "wound", "write", "wrong", "wrote", "yield", "young", "youth"
 ]
 
-# Dictionary to store user statistics
-user_stats = {}
+class UserStats:
+    def __init__(self):
+        self.conn = self.get_db_connection()
+        self.create_tables()
 
-def load_user_stats():
-    """Load user statistics from a JSON file."""
-    try:
-        with open('user_stats.json', 'r') as f:
-            content = f.read()
-            if not content:  # If file is empty
-                return {}
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        # If file doesn't exist or is corrupted, create a new one
-        with open('user_stats.json', 'w') as f:
-            json.dump({}, f)
-        return {}
+    def get_db_connection(self):
+        """Get database connection from Neon."""
+        try:
+            database_url = os.getenv('DATABASE_URL')
+            if not database_url:
+                raise ValueError("DATABASE_URL environment variable not set")
 
-def save_user_stats():
-    """Save user statistics to a JSON file."""
-    with open('user_stats.json', 'w') as f:
-        json.dump(user_stats, f)
+            return psycopg2.connect(database_url)
+        except Exception as e:
+            print(f"Error connecting to database: {e}")
+            return None
 
-# Load existing stats when bot starts
-user_stats = load_user_stats()
+    def create_tables(self):
+        """Create necessary tables if they don't exist."""
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS games (
+                        id SERIAL PRIMARY KEY,
+                        user_id TEXT NOT NULL,
+                        timestamp TIMESTAMP NOT NULL,
+                        won BOOLEAN NOT NULL
+                    )
+                """)
+            self.conn.commit()
+        except Exception as e:
+            print(f"Error creating tables: {e}")
+
+    def add_game(self, user_id: str, won: bool):
+        """Add a game result to the database."""
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO games (user_id, timestamp, won) VALUES (%s, %s, %s)",
+                    (user_id, datetime.datetime.now(), won)
+                )
+            self.conn.commit()
+        except Exception as e:
+            print(f"Error adding game: {e}")
+
+    def get_monthly_stats(self):
+        """Get stats for the current month."""
+        try:
+            current_month = datetime.datetime.now().strftime("%Y-%m")
+            with self.conn.cursor(cursor_factory=DictCursor) as cur:
+                cur.execute("""
+                    SELECT
+                        user_id,
+                        COUNT(*) as games_played,
+                        SUM(CASE WHEN won THEN 1 ELSE 0 END) as words_guessed
+                    FROM games
+                    WHERE to_char(timestamp, 'YYYY-MM') = %s
+                    GROUP BY user_id
+                    HAVING COUNT(*) > 0
+                    ORDER BY words_guessed DESC
+                """, (current_month,))
+                return [dict(row) for row in cur.fetchall()]
+        except Exception as e:
+            print(f"Error getting monthly stats: {e}")
+            return []
+
+    def get_overall_stats(self):
+        """Get overall stats for all users."""
+        try:
+            with self.conn.cursor(cursor_factory=DictCursor) as cur:
+                cur.execute("""
+                    SELECT
+                        user_id,
+                        COUNT(*) as games_played,
+                        SUM(CASE WHEN won THEN 1 ELSE 0 END) as words_guessed
+                    FROM games
+                    GROUP BY user_id
+                    HAVING COUNT(*) > 0
+                    ORDER BY words_guessed DESC
+                """)
+                return [dict(row) for row in cur.fetchall()]
+        except Exception as e:
+            print(f"Error getting overall stats: {e}")
+            return []
+
+    def __del__(self):
+        """Close database connection when object is destroyed."""
+        if hasattr(self, 'conn') and self.conn:
+            self.conn.close()
+
+# Create a global instance of UserStats
+user_stats = UserStats()
 
 class GuessleBot(commands.Bot):
     def __init__(self):
@@ -306,16 +376,7 @@ async def guess_word(interaction: discord.Interaction, word: str):
 
     if guessed_word == game["word"]:
         # Update user stats when they win
-        user_id = str(interaction.user.id)
-        if user_id not in user_stats:
-            user_stats[user_id] = {'games': []}
-
-        # Add game with timestamp and result
-        user_stats[user_id]['games'].append({
-            'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'won': True
-        })
-        save_user_stats()
+        user_stats.add_game(str(interaction.user.id), True)
 
         # Create public message with only colored boxes
         public_message = f"🎉 {interaction.user.name} has won Guessle!\n\n"
@@ -393,16 +454,7 @@ async def give_up(interaction: discord.Interaction):
 
     game = user_games[interaction.user.id]
     # Update games played even when giving up
-    user_id = str(interaction.user.id)
-    if user_id not in user_stats:
-        user_stats[user_id] = {'games': []}
-
-    # Add game with timestamp and result
-    user_stats[user_id]['games'].append({
-        'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'won': False
-    })
-    save_user_stats()
+    user_stats.add_game(str(interaction.user.id), False)
 
     # Create public message with only colored boxes
     public_message = f"🏳️ {interaction.user.name} has given up on Guessle!\n\n"
@@ -443,26 +495,11 @@ async def help_command(interaction: discord.Interaction):
 
 @bot.tree.command(name="leaderboard", description="View the server's overall Guessle leaderboard")
 async def leaderboard(interaction: discord.Interaction):
-    if not user_stats:
+    overall_stats = user_stats.get_overall_stats()
+
+    if not overall_stats:
         await interaction.response.send_message("No games have been played yet!")
         return
-
-    # Calculate overall stats
-    overall_stats = []
-    for user_id, stats in user_stats.items():
-        total_words = sum(1 for game in stats.get('games', []) if game.get('won', False))
-        total_games = len(stats.get('games', []))
-
-        if total_games > 0:
-            overall_stats.append({
-                'user_id': user_id,
-                'words_guessed': total_words,
-                'games_played': total_games,
-                'win_rate': (total_words / total_games * 100) if total_games > 0 else 0
-            })
-
-    # Sort by words guessed
-    overall_stats.sort(key=lambda x: x['words_guessed'], reverse=True)
 
     # Create leaderboard embed
     embed = discord.Embed(
@@ -478,9 +515,11 @@ async def leaderboard(interaction: discord.Interaction):
         except:
             username = "Unknown User"
 
+        win_rate = (stats['words_guessed'] / stats['games_played'] * 100) if stats['games_played'] > 0 else 0
+
         embed.add_field(
             name=f"{i}. {username}",
-            value=f"Words Guessed: {stats['words_guessed']}\nGames Played: {stats['games_played']}\nWin Rate: {stats['win_rate']:.1f}%",
+            value=f"Words Guessed: {stats['words_guessed']}\nGames Played: {stats['games_played']}\nWin Rate: {win_rate:.1f}%",
             inline=False
         )
 
@@ -488,36 +527,15 @@ async def leaderboard(interaction: discord.Interaction):
 
 @bot.tree.command(name="monthly", description="View the server's monthly Guessle leaderboard")
 async def monthly_leaderboard(interaction: discord.Interaction):
-    if not user_stats:
-        await interaction.response.send_message("No games have been played yet!")
+    monthly_stats = user_stats.get_monthly_stats()
+
+    if not monthly_stats:
+        await interaction.response.send_message("No games have been played this month!")
         return
-
-    # Get current month and year
-    current_month = datetime.datetime.now().strftime("%Y-%m")
-
-    # Filter and sort users by monthly stats
-    monthly_stats = []
-    for user_id, stats in user_stats.items():
-        monthly_words = sum(1 for game in stats.get('games', [])
-                          if game.get('timestamp', '').startswith(current_month)
-                          and game.get('won', False))
-        monthly_games = sum(1 for game in stats.get('games', [])
-                          if game.get('timestamp', '').startswith(current_month))
-
-        if monthly_games > 0:
-            monthly_stats.append({
-                'user_id': user_id,
-                'words_guessed': monthly_words,
-                'games_played': monthly_games,
-                'win_rate': (monthly_words / monthly_games * 100) if monthly_games > 0 else 0
-            })
-
-    # Sort by words guessed
-    monthly_stats.sort(key=lambda x: x['words_guessed'], reverse=True)
 
     # Create leaderboard embed
     embed = discord.Embed(
-        title=f"🏆 Monthly Guessle Leaderboard ({current_month})",
+        title=f"🏆 Monthly Guessle Leaderboard ({datetime.datetime.now().strftime('%Y-%m')})",
         color=discord.Color.blue()
     )
 
@@ -529,9 +547,11 @@ async def monthly_leaderboard(interaction: discord.Interaction):
         except:
             username = "Unknown User"
 
+        win_rate = (stats['words_guessed'] / stats['games_played'] * 100) if stats['games_played'] > 0 else 0
+
         embed.add_field(
             name=f"{i}. {username}",
-            value=f"Words Guessed: {stats['words_guessed']}\nGames Played: {stats['games_played']}\nWin Rate: {stats['win_rate']:.1f}%",
+            value=f"Words Guessed: {stats['words_guessed']}\nGames Played: {stats['games_played']}\nWin Rate: {win_rate:.1f}%",
             inline=False
         )
 
@@ -542,7 +562,7 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send("❌ Missing argument. Please provide all required arguments.")
     elif isinstance(error, commands.CommandNotFound):
-        await ctx.send("❌ Command not found. Available commands: `-guessle`, `-guess`, `-status`, `-giveup`")
+        await ctx.send("❌ Command not found. Available commands: `/guessle`, `/guess`, `/status`, `/giveup`, `/help`, `/leaderboard`, `/monthly`")
     else:
         await ctx.send(f"❌ An error occurred: {str(error)}")
 
