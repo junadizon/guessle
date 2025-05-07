@@ -577,8 +577,8 @@ async def game_status(interaction: discord.Interaction):
 
     # Show all previous attempts privately
     message = "Your current game status:\n\n"
-    for i, (guess, fb) in enumerate(game["guesses"], 1):
-        message += f"{fb}\n"
+    for guess in game["guesses"]:
+        message += f"{get_feedback(guess, game['word'], show_word=False, use_custom_emojis=True)}\n"
     message += f"\nYou're on attempt {game['attempts']} of 6."
 
     await interaction.response.send_message(message, ephemeral=True)
