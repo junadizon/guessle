@@ -142,10 +142,6 @@ class GuessleBot(commands.Bot):
         await site.start()
         print(f"Web server started on port {PORT}")
 
-        # Load emojis for each guild the bot is in
-        for guild in self.guilds:
-            await load_emojis(guild)
-
         # Sync commands with Discord
         try:
             synced = await self.tree.sync()
@@ -200,8 +196,7 @@ def get_feedback(guess, correct, show_word=True):
     # First pass: mark correct positions
     for i in range(5):
         if guess[i] == correct[i]:
-            emoji_id = EMOJI_MAP.get(f'green_{guess[i]}', f'green_{guess[i]}')
-            feedback.append(f"<:{emoji_id}>")  # Green - correct position
+            feedback.append("🟩")  # Green - correct position
             correct_list[i] = None  # Mark as used
         else:
             feedback.append(None)
@@ -210,12 +205,10 @@ def get_feedback(guess, correct, show_word=True):
     for i in range(5):
         if feedback[i] is None:  # If not already marked as correct
             if guess[i] in correct_list:
-                emoji_id = EMOJI_MAP.get(f'yellow_{guess[i]}', f'yellow_{guess[i]}')
-                feedback[i] = f"<:{emoji_id}>"  # Yellow - correct letter, wrong position
+                feedback[i] = "🟨"  # Yellow - correct letter, wrong position
                 correct_list[correct_list.index(guess[i])] = None  # Mark as used
             else:
-                emoji_id = EMOJI_MAP.get(f'gray_{guess[i]}', f'gray_{guess[i]}')
-                feedback[i] = f"<:{emoji_id}>"  # Gray - letter not in word
+                feedback[i] = "⬛"  # Gray - letter not in word
 
     result = " ".join(feedback)
     if show_word:
