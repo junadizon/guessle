@@ -5,10 +5,13 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import os
 import asyncio
+from aiohttp import web
+import threading
 
 # Load token from .env
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
+PORT = int(os.getenv("PORT", 8080))  # Get PORT from environment variable, default to 8080
 
 # Intents and Bot Setup
 intents = discord.Intents.default()
@@ -87,8 +90,26 @@ WORD_LIST = {
 class GuessleBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix='/', intents=intents)
+        self.web_app = web.Application()
+        self.setup_web_routes()
+
+    def setup_web_routes(self):
+        """Set up web routes for health checks."""
+        self.web_app.router.add_get('/', self.handle_health_check)
+        self.web_app.router.add_get('/health', self.handle_health_check)
+
+    async def handle_health_check(self, request):
+        """Handle health check requests."""
+        return web.Response(text="Bot is running!")
 
     async def setup_hook(self):
+        # Start the web server
+        runner = web.AppRunner(self.web_app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', PORT)
+        await site.start()
+        print(f"Web server started on port {PORT}")
+
         # Sync commands with Discord
         try:
             synced = await self.tree.sync()
