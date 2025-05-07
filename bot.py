@@ -32,26 +32,33 @@ EMOJI_MAP = {}
 async def load_emojis(guild):
     """Load emoji IDs from a JSON file or create it if it doesn't exist."""
     global EMOJI_MAP
+    print(f"Loading emojis for guild: {guild.name}")
     try:
         with open('emoji_map.json', 'r') as f:
             EMOJI_MAP = json.load(f)
+            print(f"Loaded {len(EMOJI_MAP)} emojis from file")
     except FileNotFoundError:
+        print("Emoji map not found, creating new one...")
         # Create emoji map if it doesn't exist
         EMOJI_MAP = {}
         for color in ['green', 'yellow', 'gray']:
             for letter in 'abcdefghijklmnopqrstuvwxyz':
                 emoji_path = f'emojis/{color}/{color}_{letter}.png'
                 if os.path.exists(emoji_path):
+                    print(f"Creating emoji for {emoji_path}")
                     with open(emoji_path, 'rb') as f:
                         emoji = await guild.create_custom_emoji(
                             name=f'{color}_{letter}',
                             image=f.read()
                         )
                         EMOJI_MAP[f'{color}_{letter}'] = str(emoji)
+                        print(f"Created emoji: {emoji}")
 
         # Save the emoji map
+        print("Saving emoji map...")
         with open('emoji_map.json', 'w') as f:
             json.dump(EMOJI_MAP, f)
+        print("Emoji map saved!")
 
 # Common 5-letter words for random selection
 COMMON_WORDS = [
@@ -270,6 +277,9 @@ class GuessleBot(commands.Bot):
         # Start the activity update loop
         self.bg_task = self.loop.create_task(self.update_activity())
 
+        # Load emojis when the bot is ready
+        await self.load_emojis()
+
     async def update_activity(self):
         await self.wait_until_ready()
         while not self.is_closed():
@@ -296,6 +306,13 @@ class GuessleBot(commands.Bot):
         """Load emojis when joining a new guild."""
         await load_emojis(guild)
 
+    async def load_emojis(self):
+        """Load emojis when the bot is ready."""
+        print("Loading emojis...")
+        for guild in self.guilds:
+            await load_emojis(guild)
+        print("Emojis loaded!")
+
 bot = GuessleBot()
 
 # Track active games for rich presence
@@ -315,7 +332,8 @@ def get_feedback(guess, correct, show_word=True, use_custom_emojis=False):
     for i in range(5):
         if guess[i] == correct[i]:
             if use_custom_emojis:
-                feedback.append(f":green_{guess[i]}:")  # Use custom emoji name
+                emoji_key = f"green_{guess[i]}"
+                feedback.append(EMOJI_MAP.get(emoji_key, "🟩"))  # Use actual emoji ID
             else:
                 feedback.append("🟩")  # Green - correct position
             correct_list[i] = None  # Mark as used
@@ -327,22 +345,20 @@ def get_feedback(guess, correct, show_word=True, use_custom_emojis=False):
         if feedback[i] is None:  # If not already marked as correct
             if guess[i] in correct_list:
                 if use_custom_emojis:
-                    feedback[i] = f":yellow_{guess[i]}:"  # Use custom emoji name
+                    emoji_key = f"yellow_{guess[i]}"
+                    feedback[i] = EMOJI_MAP.get(emoji_key, "🟨")  # Use actual emoji ID
                 else:
                     feedback[i] = "🟨"  # Yellow - correct letter, wrong position
                 correct_list[correct_list.index(guess[i])] = None  # Mark as used
             else:
                 if use_custom_emojis:
-                    feedback[i] = f":gray_{guess[i]}:"  # Use custom emoji name
+                    emoji_key = f"gray_{guess[i]}"
+                    feedback[i] = EMOJI_MAP.get(emoji_key, "⬛")  # Use actual emoji ID
                 else:
                     feedback[i] = "⬛"  # Gray - letter not in word
 
-    if use_custom_emojis:
-        # Convert emoji names to actual emojis and join with spaces
-        result = " ".join(EMOJI_MAP.get(emoji, emoji) for emoji in feedback)
-    else:
-        # Join with spaces for colored boxes
-        result = " ".join(feedback)
+    # Join with spaces
+    result = " ".join(feedback)
 
     if show_word:
         result += f" - `{guess.upper()}`"
