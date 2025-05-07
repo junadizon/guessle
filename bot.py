@@ -9,6 +9,7 @@ from aiohttp import web
 import threading
 from spellchecker import SpellChecker
 import json
+import datetime
 
 # Load token from .env
 load_dotenv()
@@ -118,6 +119,25 @@ COMMON_WORDS = [
     "white", "whole", "whose", "woman", "women", "world", "worse", "worst",
     "would", "wound", "write", "wrong", "wrote", "yield", "young", "youth"
 ]
+
+# Dictionary to store user statistics
+user_stats = {}
+
+def load_user_stats():
+    """Load user statistics from a JSON file."""
+    try:
+        with open('user_stats.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+def save_user_stats():
+    """Save user statistics to a JSON file."""
+    with open('user_stats.json', 'w') as f:
+        json.dump(user_stats, f)
+
+# Load existing stats when bot starts
+user_stats = load_user_stats()
 
 class GuessleBot(commands.Bot):
     def __init__(self):
@@ -279,6 +299,18 @@ async def guess_word(interaction: discord.Interaction, word: str):
     )
 
     if guessed_word == game["word"]:
+        # Update user stats when they win
+        user_id = str(interaction.user.id)
+        if user_id not in user_stats:
+            user_stats[user_id] = {'games': []}
+
+        # Add game with timestamp and result
+        user_stats[user_id]['games'].append({
+            'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'won': True
+        })
+        save_user_stats()
+
         # Create public message with only colored boxes
         public_message = f"🎉 {interaction.user.name} has won Guessle!\n\n"
         for i, (guess, fb) in enumerate(game["guesses"], 1):
@@ -354,6 +386,18 @@ async def give_up(interaction: discord.Interaction):
         return
 
     game = user_games[interaction.user.id]
+    # Update games played even when giving up
+    user_id = str(interaction.user.id)
+    if user_id not in user_stats:
+        user_stats[user_id] = {'games': []}
+
+    # Add game with timestamp and result
+    user_stats[user_id]['games'].append({
+        'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'won': False
+    })
+    save_user_stats()
+
     # Create public message with only colored boxes
     public_message = f"🏳️ {interaction.user.name} has given up on Guessle!\n\n"
     for i, (guess, fb) in enumerate(game["guesses"], 1):
@@ -389,6 +433,102 @@ async def help_command(interaction: discord.Interaction):
         embed.add_field(name=cmd, value=desc, inline=False)
 
     embed.set_footer(text="Type / to see all available commands")
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="leaderboard", description="View the server's overall Guessle leaderboard")
+async def leaderboard(interaction: discord.Interaction):
+    if not user_stats:
+        await interaction.response.send_message("No games have been played yet!")
+        return
+
+    # Calculate overall stats
+    overall_stats = []
+    for user_id, stats in user_stats.items():
+        total_words = sum(1 for game in stats.get('games', []) if game.get('won', False))
+        total_games = len(stats.get('games', []))
+
+        if total_games > 0:
+            overall_stats.append({
+                'user_id': user_id,
+                'words_guessed': total_words,
+                'games_played': total_games,
+                'win_rate': (total_words / total_games * 100) if total_games > 0 else 0
+            })
+
+    # Sort by words guessed
+    overall_stats.sort(key=lambda x: x['words_guessed'], reverse=True)
+
+    # Create leaderboard embed
+    embed = discord.Embed(
+        title="🏆 Overall Guessle Leaderboard",
+        color=discord.Color.gold()
+    )
+
+    # Add top 10 users to the leaderboard
+    for i, stats in enumerate(overall_stats[:10], 1):
+        try:
+            user = await bot.fetch_user(int(stats['user_id']))
+            username = user.name
+        except:
+            username = "Unknown User"
+
+        embed.add_field(
+            name=f"{i}. {username}",
+            value=f"Words Guessed: {stats['words_guessed']}\nGames Played: {stats['games_played']}\nWin Rate: {stats['win_rate']:.1f}%",
+            inline=False
+        )
+
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="monthly", description="View the server's monthly Guessle leaderboard")
+async def monthly_leaderboard(interaction: discord.Interaction):
+    if not user_stats:
+        await interaction.response.send_message("No games have been played yet!")
+        return
+
+    # Get current month and year
+    current_month = datetime.datetime.now().strftime("%Y-%m")
+
+    # Filter and sort users by monthly stats
+    monthly_stats = []
+    for user_id, stats in user_stats.items():
+        monthly_words = sum(1 for game in stats.get('games', [])
+                          if game.get('timestamp', '').startswith(current_month)
+                          and game.get('won', False))
+        monthly_games = sum(1 for game in stats.get('games', [])
+                          if game.get('timestamp', '').startswith(current_month))
+
+        if monthly_games > 0:
+            monthly_stats.append({
+                'user_id': user_id,
+                'words_guessed': monthly_words,
+                'games_played': monthly_games,
+                'win_rate': (monthly_words / monthly_games * 100) if monthly_games > 0 else 0
+            })
+
+    # Sort by words guessed
+    monthly_stats.sort(key=lambda x: x['words_guessed'], reverse=True)
+
+    # Create leaderboard embed
+    embed = discord.Embed(
+        title=f"🏆 Monthly Guessle Leaderboard ({current_month})",
+        color=discord.Color.blue()
+    )
+
+    # Add top 10 users to the leaderboard
+    for i, stats in enumerate(monthly_stats[:10], 1):
+        try:
+            user = await bot.fetch_user(int(stats['user_id']))
+            username = user.name
+        except:
+            username = "Unknown User"
+
+        embed.add_field(
+            name=f"{i}. {username}",
+            value=f"Words Guessed: {stats['words_guessed']}\nGames Played: {stats['games_played']}\nWin Rate: {stats['win_rate']:.1f}%",
+            inline=False
+        )
+
     await interaction.response.send_message(embed=embed)
 
 @bot.event
