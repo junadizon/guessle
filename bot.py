@@ -315,7 +315,7 @@ def get_feedback(guess, correct, show_word=True, use_custom_emojis=False):
     for i in range(5):
         if guess[i] == correct[i]:
             if use_custom_emojis:
-                feedback.append(f"green_{guess[i]}")  # Use custom emoji name
+                feedback.append(f":green_{guess[i]}:")  # Use custom emoji name
             else:
                 feedback.append("🟩")  # Green - correct position
             correct_list[i] = None  # Mark as used
@@ -327,13 +327,13 @@ def get_feedback(guess, correct, show_word=True, use_custom_emojis=False):
         if feedback[i] is None:  # If not already marked as correct
             if guess[i] in correct_list:
                 if use_custom_emojis:
-                    feedback[i] = f"yellow_{guess[i]}"  # Use custom emoji name
+                    feedback[i] = f":yellow_{guess[i]}:"  # Use custom emoji name
                 else:
                     feedback[i] = "🟨"  # Yellow - correct letter, wrong position
                 correct_list[correct_list.index(guess[i])] = None  # Mark as used
             else:
                 if use_custom_emojis:
-                    feedback[i] = f"gray_{guess[i]}"  # Use custom emoji name
+                    feedback[i] = f":gray_{guess[i]}:"  # Use custom emoji name
                 else:
                     feedback[i] = "⬛"  # Gray - letter not in word
 
