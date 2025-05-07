@@ -5,6 +5,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import os
 import asyncio
+import enchant
 
 # Load token from .env
 load_dotenv()
@@ -20,7 +21,13 @@ class GuessleBot(commands.Bot):
         super().__init__(command_prefix='/', intents=intents)
 
     async def setup_hook(self):
-        await self.tree.sync()
+        # Sync commands with Discord
+        try:
+            synced = await self.tree.sync()
+            print(f"Synced {len(synced)} command(s)")
+        except Exception as e:
+            print(f"Failed to sync commands: {e}")
+
         # Start the activity update loop
         self.bg_task = self.loop.create_task(self.update_activity())
 
@@ -48,22 +55,36 @@ class GuessleBot(commands.Bot):
 
 bot = GuessleBot()
 
-# Store verification data
-verification_data = {}
-
 # Track active games for rich presence
 active_games = set()
 
-# Load words
-try:
-    with open("5_lw.txt") as f:
-        WORD_LIST = [line.strip().lower() for line in f if len(line.strip()) == 5]
-except FileNotFoundError:
-    print("Error: 5_lw.txt not found!")
-    exit(1)
-except Exception as e:
-    print(f"Error loading word list: {e}")
-    exit(1)
+# Initialize dictionary
+dictionary = enchant.Dict("en_US")
+
+def get_random_word():
+    """Generate a random 5-letter word using enchant dictionary."""
+    # List of common 5-letter words to use as fallback
+    common_words = [
+        "apple", "beach", "cloud", "dance", "earth", "flame", "ghost", "heart",
+        "jelly", "knife", "light", "music", "night", "ocean", "piano", "queen",
+        "river", "smile", "tiger", "unity", "voice", "water", "xenon", "yield",
+        "zebra"
+    ]
+
+    # Try to get a random word from the dictionary
+    try:
+        # Get all words from the dictionary
+        words = dictionary.suggest("a")  # This gets a list of words starting with 'a'
+        # Filter for 5-letter words
+        five_letter_words = [word for word in words if len(word) == 5 and word.isalpha()]
+
+        if five_letter_words:
+            return random.choice(five_letter_words)
+    except Exception:
+        pass
+
+    # If dictionary method fails, use the common words list
+    return random.choice(common_words)
 
 user_games = {}
 
@@ -90,34 +111,12 @@ def get_feedback(guess, correct):
 
     return "".join(feedback)
 
-@bot.tree.command(name="verify", description="Verify yourself by winning a game of Guessle")
-async def verify_command(interaction: discord.Interaction):
-    if interaction.user.id in verification_data:
-        await interaction.response.send_message("You already have a verification in progress! Complete your game first.", ephemeral=True)
-        return
-
-    word = random.choice(WORD_LIST)
-    verification_data[interaction.user.id] = {
-        "word": word,
-        "attempts": 0,
-        "verified": False
-    }
-
-    # Update activity to show verification
-    await bot.change_presence(
-        activity=discord.Activity(
-            type=discord.ActivityType.watching,
-            name=f"Verification: {interaction.user.name}"
-        )
-    )
-
-    await interaction.response.send_message(
-        "🎮 Verification Game Started!\n"
-        "Guess the 5-letter word to verify yourself.\n"
-        "Use `/verify_guess` to make your guess.\n"
-        "You have 6 attempts to win!",
-        ephemeral=True
-    )
+async def is_valid_word(word: str) -> bool:
+    """Check if a word exists using enchant dictionary."""
+    try:
+        return dictionary.check(word)
+    except Exception:
+        return False
 
 @bot.tree.command(name="guessle", description="Start a new Guessle game")
 async def start_guessle(interaction: discord.Interaction):
@@ -125,8 +124,12 @@ async def start_guessle(interaction: discord.Interaction):
         await interaction.response.send_message("You already have an ongoing game! Use `/guess` to continue or `/giveup` to end it.")
         return
 
-    word = random.choice(WORD_LIST)
-    user_games[interaction.user.id] = {"word": word, "attempts": 0}
+    word = get_random_word()
+    user_games[interaction.user.id] = {
+        "word": word,
+        "attempts": 0,
+        "guesses": []  # Store previous guesses and their feedback
+    }
     active_games.add(interaction.user.id)
 
     # Update activity to show active game
@@ -137,7 +140,7 @@ async def start_guessle(interaction: discord.Interaction):
         )
     )
 
-    await interaction.response.send_message("🎉 Guessle started! Guess a 5-letter word using `/guess`.")
+    await interaction.response.send_message(f"🎉 {interaction.user.name} has started Guessle! Guess a 5-letter word using `/guess`.")
 
 @bot.tree.command(name="guess", description="Make a guess in your current game")
 @app_commands.describe(word="Enter a 5-letter word")
@@ -148,6 +151,11 @@ async def guess_word(interaction: discord.Interaction, word: str):
         await interaction.response.send_message("❌ Invalid word. Make sure it's 5 letters.")
         return
 
+    # Check if the word exists in the dictionary
+    if not await is_valid_word(guessed_word):
+        await interaction.response.send_message("❌ That's not a valid English word. Try another word!")
+        return
+
     game = user_games.get(interaction.user.id)
     if not game:
         await interaction.response.send_message("You haven't started a game yet. Use `/guessle` to start one.")
@@ -155,7 +163,17 @@ async def guess_word(interaction: discord.Interaction, word: str):
 
     game["attempts"] += 1
     feedback = get_feedback(guessed_word, game["word"])
-    await interaction.response.send_message(f"Attempt {game['attempts']}: `{guessed_word.upper()}` -> {feedback}")
+
+    # Store the guess and feedback
+    game["guesses"].append((guessed_word, feedback))
+
+    # Create message with all attempts
+    message = ""
+    for i, (guess, fb) in enumerate(game["guesses"], 1):
+        message += f"Attempt {i}: `{guess.upper()}` -> {fb}\n"
+    message += f"\nYou're on attempt {game['attempts']} of 6."
+
+    await interaction.response.send_message(message)
 
     if guessed_word == game["word"]:
         await interaction.followup.send(f"✅ Congrats! You guessed the word in {game['attempts']} attempts!")
@@ -189,7 +207,13 @@ async def game_status(interaction: discord.Interaction):
         await interaction.response.send_message("You don't have an active game. Use `/guessle` to start one!")
         return
 
-    await interaction.response.send_message(f"You're on attempt {game['attempts']} of 6.")
+    # Show all previous attempts
+    message = ""
+    for i, (guess, fb) in enumerate(game["guesses"], 1):
+        message += f"Attempt {i}: `{guess.upper()}` -> {fb}\n"
+    message += f"\nYou're on attempt {game['attempts']} of 6."
+
+    await interaction.response.send_message(message)
 
 @bot.tree.command(name="giveup", description="End your current game and reveal the word")
 async def give_up(interaction: discord.Interaction):
@@ -231,43 +255,6 @@ async def on_command_error(ctx, error):
         await ctx.send("❌ Command not found. Available commands: `-guessle`, `-guess`, `-status`, `-giveup`")
     else:
         await ctx.send(f"❌ An error occurred: {str(error)}")
-
-@bot.tree.command(name="verify_guess", description="Make a guess in your verification game")
-@app_commands.describe(word="Enter a 5-letter word")
-async def verify_guess(interaction: discord.Interaction, word: str):
-    if interaction.user.id not in verification_data:
-        await interaction.response.send_message("You haven't started a verification game! Use `/verify` first.", ephemeral=True)
-        return
-
-    guessed_word = word.lower()
-    if len(guessed_word) != 5:
-        await interaction.response.send_message("❌ Invalid word. Make sure it's 5 letters.", ephemeral=True)
-        return
-
-    game = verification_data[interaction.user.id]
-    game["attempts"] += 1
-    feedback = get_feedback(guessed_word, game["word"])
-
-    await interaction.response.send_message(
-        f"Attempt {game['attempts']}: `{guessed_word.upper()}` -> {feedback}",
-        ephemeral=True
-    )
-
-    if guessed_word == game["word"]:
-        game["verified"] = True
-        await interaction.followup.send(
-            f"✅ Verification successful! You guessed the word in {game['attempts']} attempts.\n"
-            "You can now claim your role!",
-            ephemeral=True
-        )
-        del verification_data[interaction.user.id]
-    elif game["attempts"] >= 6:
-        await interaction.followup.send(
-            f"❌ Verification failed! The word was `{game['word'].upper()}`.\n"
-            "Try again with `/verify`",
-            ephemeral=True
-        )
-        del verification_data[interaction.user.id]
 
 # Start bot
 bot.run(TOKEN)
