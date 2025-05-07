@@ -282,13 +282,13 @@ async def guess_word(interaction: discord.Interaction, word: str):
         # Create public message with only colored boxes
         public_message = f"🎉 {interaction.user.name} has won Guessle!\n\n"
         for i, (guess, fb) in enumerate(game["guesses"], 1):
-            public_message += f"Attempt {i}: {get_feedback(guess, game['word'], show_word=False)}\n"
+            public_message += f"{get_feedback(guess, game['word'], show_word=False)}\n"
         public_message += f"\nGuessed the word in {game['attempts']} attempts!"
 
         # Create private message with the word
         private_message = f"🎉 You won Guessle!\n\n"
         for i, (guess, fb) in enumerate(game["guesses"], 1):
-            private_message += f"Attempt {i}: {fb}\n"
+            private_message += f"{fb}\n"
         private_message += f"\nThe word was `{game['word'].upper()}`"
 
         await interaction.followup.send(public_message)
@@ -309,12 +309,12 @@ async def guess_word(interaction: discord.Interaction, word: str):
         # Create public message with only colored boxes
         public_message = f"❌ {interaction.user.name} has lost Guessle!\n\n"
         for i, (guess, fb) in enumerate(game["guesses"], 1):
-            public_message += f"Attempt {i}: {get_feedback(guess, game['word'], show_word=False)}\n"
+            public_message += f"{get_feedback(guess, game['word'], show_word=False)}\n"
 
         # Create private message with the word
         private_message = f"❌ You lost Guessle!\n\n"
         for i, (guess, fb) in enumerate(game["guesses"], 1):
-            private_message += f"Attempt {i}: {fb}\n"
+            private_message += f"{fb}\n"
         private_message += f"\nThe word was `{game['word'].upper()}`"
 
         await interaction.followup.send(public_message)
@@ -342,7 +342,7 @@ async def game_status(interaction: discord.Interaction):
     # Show all previous attempts privately
     message = "Your current game status:\n\n"
     for i, (guess, fb) in enumerate(game["guesses"], 1):
-        message += f"Attempt {i}: {fb}\n"
+        message += f"{fb}\n"
     message += f"\nYou're on attempt {game['attempts']} of 6."
 
     await interaction.response.send_message(message, ephemeral=True)
@@ -357,12 +357,12 @@ async def give_up(interaction: discord.Interaction):
     # Create public message with only colored boxes
     public_message = f"🏳️ {interaction.user.name} has given up on Guessle!\n\n"
     for i, (guess, fb) in enumerate(game["guesses"], 1):
-        public_message += f"Attempt {i}: {get_feedback(guess, game['word'], show_word=False)}\n"
+        public_message += f"{get_feedback(guess, game['word'], show_word=False)}\n"
 
     # Create private message with the word
     private_message = f"🏳️ You gave up on Guessle!\n\n"
     for i, (guess, fb) in enumerate(game["guesses"], 1):
-        private_message += f"Attempt {i}: {fb}\n"
+        private_message += f"{fb}\n"
     private_message += f"\nThe word was `{game['word'].upper()}`"
 
     await interaction.response.send_message(public_message)
