@@ -124,6 +124,7 @@ COMMON_WORDS = [
 
 class UserStats:
     def __init__(self):
+        print("Initializing UserStats...")
         self.conn = self.get_db_connection()
         self.create_tables()
 
@@ -132,9 +133,13 @@ class UserStats:
         try:
             database_url = os.getenv('DATABASE_URL')
             if not database_url:
+                print("DATABASE_URL not found in environment variables!")
                 raise ValueError("DATABASE_URL environment variable not set")
 
-            return psycopg2.connect(database_url)
+            print("Attempting to connect to database...")
+            conn = psycopg2.connect(database_url)
+            print("Successfully connected to database!")
+            return conn
         except Exception as e:
             print(f"Error connecting to database: {e}")
             return None
@@ -142,6 +147,7 @@ class UserStats:
     def create_tables(self):
         """Create necessary tables if they don't exist."""
         try:
+            print("Creating tables if they don't exist...")
             with self.conn.cursor() as cur:
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS games (
@@ -152,20 +158,36 @@ class UserStats:
                     )
                 """)
             self.conn.commit()
+            print("Tables created successfully!")
         except Exception as e:
             print(f"Error creating tables: {e}")
 
     def add_game(self, user_id: str, won: bool):
         """Add a game result to the database."""
         try:
+            print(f"Adding game for user {user_id}, won: {won}")
             with self.conn.cursor() as cur:
                 cur.execute(
                     "INSERT INTO games (user_id, timestamp, won) VALUES (%s, %s, %s)",
                     (user_id, datetime.datetime.now(), won)
                 )
             self.conn.commit()
+            print("Game added successfully!")
         except Exception as e:
             print(f"Error adding game: {e}")
+            # Try to reconnect if connection is lost
+            try:
+                self.conn = self.get_db_connection()
+                if self.conn:
+                    with self.conn.cursor() as cur:
+                        cur.execute(
+                            "INSERT INTO games (user_id, timestamp, won) VALUES (%s, %s, %s)",
+                            (user_id, datetime.datetime.now(), won)
+                        )
+                    self.conn.commit()
+                    print("Game added successfully after reconnection!")
+            except Exception as e2:
+                print(f"Error adding game after reconnection: {e2}")
 
     def get_monthly_stats(self):
         """Get stats for the current month."""
@@ -375,6 +397,7 @@ async def guess_word(interaction: discord.Interaction, word: str):
     )
 
     if guessed_word == game["word"]:
+        print(f"User {interaction.user.id} won the game!")
         # Update user stats when they win
         user_stats.add_game(str(interaction.user.id), True)
 
@@ -453,6 +476,7 @@ async def give_up(interaction: discord.Interaction):
         return
 
     game = user_games[interaction.user.id]
+    print(f"User {interaction.user.id} gave up the game")
     # Update games played even when giving up
     user_stats.add_game(str(interaction.user.id), False)
 
@@ -556,6 +580,24 @@ async def monthly_leaderboard(interaction: discord.Interaction):
         )
 
     await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="testdb", description="Test database connection")
+async def test_db(interaction: discord.Interaction):
+    try:
+        # Try to insert a test record
+        user_stats.add_game(str(interaction.user.id), True)
+
+        # Try to read it back
+        with user_stats.conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT * FROM games WHERE user_id = %s", (str(interaction.user.id),))
+            result = cur.fetchone()
+
+        if result:
+            await interaction.response.send_message("Database connection working! Test record inserted and retrieved successfully.")
+        else:
+            await interaction.response.send_message("Database connection working, but test record not found.")
+    except Exception as e:
+        await interaction.response.send_message(f"Database error: {str(e)}")
 
 @bot.event
 async def on_command_error(ctx, error):
