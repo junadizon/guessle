@@ -127,8 +127,14 @@ def load_user_stats():
     """Load user statistics from a JSON file."""
     try:
         with open('user_stats.json', 'r') as f:
+            content = f.read()
+            if not content:  # If file is empty
+                return {}
             return json.load(f)
-    except FileNotFoundError:
+    except (FileNotFoundError, json.JSONDecodeError):
+        # If file doesn't exist or is corrupted, create a new one
+        with open('user_stats.json', 'w') as f:
+            json.dump({}, f)
         return {}
 
 def save_user_stats():
