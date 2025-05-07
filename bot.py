@@ -442,11 +442,7 @@ def get_feedback(guess, correct, show_word=True, use_custom_emojis=False):
                     feedback[i] = "⬛"
 
     # Join with spaces
-    result = " ".join(feedback)
-
-    if show_word:
-        result += f" - `{guess.upper()}`"
-    return result
+    return " ".join(feedback)
 
 async def is_valid_word(word: str) -> bool:
     """Check if a word exists using pyspellchecker."""
