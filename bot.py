@@ -7,6 +7,7 @@ import os
 import asyncio
 from aiohttp import web
 import threading
+from spellchecker import SpellChecker
 
 # Load token from .env
 load_dotenv()
@@ -18,8 +19,11 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True  # Required for role management
 
-# Word list for validation
-WORD_LIST = {
+# Initialize spell checker
+spell = SpellChecker()
+
+# Common 5-letter words for random selection
+COMMON_WORDS = [
     "apple", "beach", "cloud", "dance", "earth", "flame", "ghost", "heart",
     "jelly", "knife", "light", "music", "night", "ocean", "piano", "queen",
     "river", "smile", "tiger", "unity", "voice", "water", "xenon", "yield",
@@ -85,7 +89,7 @@ WORD_LIST = {
     "voice", "waste", "watch", "water", "wheel", "where", "which", "while",
     "white", "whole", "whose", "woman", "women", "world", "worse", "worst",
     "would", "wound", "write", "wrong", "wrote", "yield", "young", "youth"
-}
+]
 
 class GuessleBot(commands.Bot):
     def __init__(self):
@@ -148,8 +152,8 @@ bot = GuessleBot()
 active_games = set()
 
 def get_random_word():
-    """Generate a random 5-letter word from the word list."""
-    return random.choice(list(WORD_LIST))
+    """Generate a random 5-letter word."""
+    return random.choice(COMMON_WORDS)
 
 user_games = {}
 
@@ -160,7 +164,7 @@ def get_feedback(guess, correct):
     # First pass: mark correct positions
     for i in range(5):
         if guess[i] == correct[i]:
-            feedback.append("🟩")
+            feedback.append(f"🟢 {guess[i].upper()}")  # Green - correct position
             correct_list[i] = None  # Mark as used
         else:
             feedback.append(None)
@@ -169,16 +173,20 @@ def get_feedback(guess, correct):
     for i in range(5):
         if feedback[i] is None:  # If not already marked as correct
             if guess[i] in correct_list:
-                feedback[i] = "🟨"
+                feedback[i] = f"🟡 {guess[i].upper()}"  # Yellow - correct letter, wrong position
                 correct_list[correct_list.index(guess[i])] = None  # Mark as used
             else:
-                feedback[i] = "⬛"
+                feedback[i] = f"⚫ {guess[i].upper()}"  # Gray - letter not in word
 
-    return "".join(feedback)
+    return " ".join(feedback)
 
 async def is_valid_word(word: str) -> bool:
-    """Check if a word exists in our word list."""
-    return word.lower() in WORD_LIST
+    """Check if a word exists using pyspellchecker."""
+    try:
+        # Check if the word is in the spell checker's dictionary
+        return len(spell.unknown([word.lower()])) == 0
+    except Exception:
+        return False
 
 @bot.tree.command(name="guessle", description="Start a new Guessle game")
 async def start_guessle(interaction: discord.Interaction):
@@ -232,7 +240,7 @@ async def guess_word(interaction: discord.Interaction, word: str):
     # Create message with all attempts
     message = ""
     for i, (guess, fb) in enumerate(game["guesses"], 1):
-        message += f"Attempt {i}: `{guess.upper()}` -> {fb}\n"
+        message += f"{fb} - `{guess.upper()}`\n"
     message += f"\nYou're on attempt {game['attempts']} of 6."
 
     await interaction.response.send_message(message)
