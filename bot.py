@@ -5,7 +5,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import os
 import asyncio
-import enchant
+from spellchecker import SpellChecker
 
 # Load token from .env
 load_dotenv()
@@ -58,33 +58,26 @@ bot = GuessleBot()
 # Track active games for rich presence
 active_games = set()
 
-# Initialize dictionary
-dictionary = enchant.Dict("en_US")
+# Initialize spell checker
+spell = SpellChecker()
+
+# Common 5-letter words list for target words
+COMMON_WORDS = [
+    "apple", "beach", "cloud", "dance", "earth", "flame", "ghost", "heart",
+    "jelly", "knife", "light", "music", "night", "ocean", "piano", "queen",
+    "river", "smile", "tiger", "unity", "voice", "water", "xenon", "yield",
+    "zebra", "actor", "baker", "candy", "drama", "eagle", "fairy", "grape",
+    "house", "ivory", "jumbo", "karma", "lemon", "mango", "noble", "olive",
+    "peach", "quilt", "radio", "snake", "table", "umbra", "vivid", "wagon",
+    "xerox", "yacht", "zesty", "amber", "brave", "crown", "dream", "eager",
+    "frost", "globe", "happy", "ivory", "jolly", "kiosk", "lunar", "magic",
+    "noble", "oasis", "pride", "quick", "royal", "sunny", "tiger", "unity",
+    "vivid", "witty", "xenon", "yield", "zesty"
+]
 
 def get_random_word():
-    """Generate a random 5-letter word using enchant dictionary."""
-    # List of common 5-letter words to use as fallback
-    common_words = [
-        "apple", "beach", "cloud", "dance", "earth", "flame", "ghost", "heart",
-        "jelly", "knife", "light", "music", "night", "ocean", "piano", "queen",
-        "river", "smile", "tiger", "unity", "voice", "water", "xenon", "yield",
-        "zebra"
-    ]
-
-    # Try to get a random word from the dictionary
-    try:
-        # Get all words from the dictionary
-        words = dictionary.suggest("a")  # This gets a list of words starting with 'a'
-        # Filter for 5-letter words
-        five_letter_words = [word for word in words if len(word) == 5 and word.isalpha()]
-
-        if five_letter_words:
-            return random.choice(five_letter_words)
-    except Exception:
-        pass
-
-    # If dictionary method fails, use the common words list
-    return random.choice(common_words)
+    """Get a random 5-letter word from the common words list."""
+    return random.choice(COMMON_WORDS)
 
 user_games = {}
 
@@ -112,11 +105,11 @@ def get_feedback(guess, correct):
     return "".join(feedback)
 
 async def is_valid_word(word: str) -> bool:
-    """Check if a word exists using enchant dictionary."""
-    try:
-        return dictionary.check(word)
-    except Exception:
+    """Check if a word is valid (5 letters and in dictionary)."""
+    if len(word) != 5 or not word.isalpha():
         return False
+    # Check if word is in dictionary or in our common words list
+    return word.lower() in COMMON_WORDS or word.lower() not in spell.unknown([word.lower()])
 
 @bot.tree.command(name="guessle", description="Start a new Guessle game")
 async def start_guessle(interaction: discord.Interaction):
