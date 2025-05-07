@@ -526,24 +526,6 @@ async def monthly_leaderboard(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="testdb", description="Test database connection")
-async def test_db(interaction: discord.Interaction):
-    try:
-        # Try to insert a test record
-        user_stats.add_game(str(interaction.user.id), True)
-
-        # Try to read it back
-        with user_stats.conn.cursor(cursor_factory=DictCursor) as cur:
-            cur.execute("SELECT * FROM games WHERE user_id = %s", (str(interaction.user.id),))
-            result = cur.fetchone()
-
-        if result:
-            await interaction.response.send_message("Database connection working! Test record inserted and retrieved successfully.")
-        else:
-            await interaction.response.send_message("Database connection working, but test record not found.")
-    except Exception as e:
-        await interaction.response.send_message(f"Database error: {str(e)}")
-
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
