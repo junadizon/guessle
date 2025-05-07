@@ -307,14 +307,17 @@ def get_random_word():
 
 user_games = {}
 
-def get_feedback(guess, correct, show_word=True):
+def get_feedback(guess, correct, show_word=True, use_custom_emojis=False):
     feedback = []
     correct_list = list(correct)
 
     # First pass: mark correct positions
     for i in range(5):
         if guess[i] == correct[i]:
-            feedback.append("🟩")  # Green - correct position
+            if use_custom_emojis:
+                feedback.append(f"green_{guess[i]}")  # Use custom emoji name
+            else:
+                feedback.append("🟩")  # Green - correct position
             correct_list[i] = None  # Mark as used
         else:
             feedback.append(None)
@@ -323,12 +326,23 @@ def get_feedback(guess, correct, show_word=True):
     for i in range(5):
         if feedback[i] is None:  # If not already marked as correct
             if guess[i] in correct_list:
-                feedback[i] = "🟨"  # Yellow - correct letter, wrong position
+                if use_custom_emojis:
+                    feedback[i] = f"yellow_{guess[i]}"  # Use custom emoji name
+                else:
+                    feedback[i] = "🟨"  # Yellow - correct letter, wrong position
                 correct_list[correct_list.index(guess[i])] = None  # Mark as used
             else:
-                feedback[i] = "⬛"  # Gray - letter not in word
+                if use_custom_emojis:
+                    feedback[i] = f"gray_{guess[i]}"  # Use custom emoji name
+                else:
+                    feedback[i] = "⬛"  # Gray - letter not in word
 
-    result = " ".join(feedback)
+    if use_custom_emojis:
+        # Convert emoji names to actual emojis
+        result = " ".join(EMOJI_MAP.get(emoji, emoji) for emoji in feedback)
+    else:
+        result = " ".join(feedback)
+
     if show_word:
         result += f" - `{guess.upper()}`"
     return result
@@ -385,16 +399,15 @@ async def guess_word(interaction: discord.Interaction, word: str):
         return
 
     game["attempts"] += 1
-    feedback = get_feedback(guessed_word, game["word"], show_word=True)  # Show word in private feedback
+    game["guesses"].append(guessed_word)
 
-    # Store the guess and feedback
-    game["guesses"].append((guessed_word, feedback))
+    # Send private feedback with custom emojis and previous guesses
+    private_message = f"Attempt {game['attempts']} of 6:\n"
+    # Show all previous guesses with custom emojis
+    for guess in game["guesses"]:
+        private_message += f"{get_feedback(guess, game['word'], show_word=True, use_custom_emojis=True)}\n"
 
-    # Send private feedback for this guess
-    await interaction.response.send_message(
-        f"Attempt {game['attempts']} of 6:\n{feedback}",
-        ephemeral=True
-    )
+    await interaction.response.send_message(private_message, ephemeral=True)
 
     if guessed_word == game["word"]:
         print(f"User {interaction.user.id} won the game!")
@@ -403,14 +416,14 @@ async def guess_word(interaction: discord.Interaction, word: str):
 
         # Create public message with only colored boxes
         public_message = f"🎉 {interaction.user.name} has won Guessle!\n\n"
-        for i, (guess, fb) in enumerate(game["guesses"], 1):
+        for guess in game["guesses"]:
             public_message += f"{get_feedback(guess, game['word'], show_word=False)}\n"
         public_message += f"\nGuessed the word in {game['attempts']} attempts!"
 
-        # Create private message with the word
+        # Create private message with custom emojis
         private_message = f"🎉 You won Guessle!\n\n"
-        for i, (guess, fb) in enumerate(game["guesses"], 1):
-            private_message += f"{fb}\n"
+        for guess in game["guesses"]:
+            private_message += f"{get_feedback(guess, game['word'], show_word=True, use_custom_emojis=True)}\n"
         private_message += f"\nThe word was `{game['word'].upper()}`"
 
         await interaction.followup.send(public_message)
@@ -434,13 +447,13 @@ async def guess_word(interaction: discord.Interaction, word: str):
 
         # Create public message with only colored boxes
         public_message = f"❌ {interaction.user.name} has lost Guessle!\n\n"
-        for i, (guess, fb) in enumerate(game["guesses"], 1):
+        for guess in game["guesses"]:
             public_message += f"{get_feedback(guess, game['word'], show_word=False)}\n"
 
-        # Create private message with the word
+        # Create private message with custom emojis
         private_message = f"❌ You lost Guessle!\n\n"
-        for i, (guess, fb) in enumerate(game["guesses"], 1):
-            private_message += f"{fb}\n"
+        for guess in game["guesses"]:
+            private_message += f"{get_feedback(guess, game['word'], show_word=True, use_custom_emojis=True)}\n"
         private_message += f"\nThe word was `{game['word'].upper()}`"
 
         await interaction.followup.send(public_message)
