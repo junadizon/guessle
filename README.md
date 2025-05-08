@@ -77,6 +77,8 @@ If you encounter any issues or have questions, please open an issue in the repos
 ---
 Made with ❤️ by friedeggyolkie (Discord) / junadizon (GitHub)
 
+
+
 # Guessle Discord Bot - AWS EC2 Deployment Guide
 
 ## Table of Contents
