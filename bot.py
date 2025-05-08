@@ -12,11 +12,15 @@ import json
 import datetime
 import psycopg2
 from psycopg2.extras import DictCursor
+import pytz
 
 # Load token from .env
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 PORT = int(os.getenv("PORT", 8080))  # Get PORT from environment variable, default to 8080
+
+# Set timezone to GMT+8
+TIMEZONE = pytz.timezone('Asia/Singapore')
 
 # Intents and Bot Setup
 intents = discord.Intents.default()
@@ -216,7 +220,8 @@ COMMON_WORDS = [
 class UserStats:
     def __init__(self):
         print("Initializing UserStats...")
-        self.conn = self.get_db_connection()
+        self.conn = None
+        self.get_db_connection()
         self.create_tables()
 
     def get_db_connection(self):
@@ -228,23 +233,41 @@ class UserStats:
                 raise ValueError("DATABASE_URL environment variable not set")
 
             print("Attempting to connect to database...")
-            conn = psycopg2.connect(database_url)
+            if self.conn is not None:
+                try:
+                    self.conn.close()
+                except:
+                    pass
+            self.conn = psycopg2.connect(database_url)
             print("Successfully connected to database!")
-            return conn
+            return self.conn
         except Exception as e:
             print(f"Error connecting to database: {e}")
             return None
 
+    def ensure_connection(self):
+        """Ensure database connection is active."""
+        try:
+            if self.conn is None or self.conn.closed:
+                self.get_db_connection()
+            return self.conn is not None
+        except Exception as e:
+            print(f"Error ensuring connection: {e}")
+            return False
+
     def create_tables(self):
         """Create necessary tables if they don't exist."""
         try:
+            if not self.ensure_connection():
+                return
+
             print("Creating tables if they don't exist...")
             with self.conn.cursor() as cur:
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS games (
                         id SERIAL PRIMARY KEY,
                         user_id TEXT NOT NULL,
-                        timestamp TIMESTAMP NOT NULL,
+                        timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
                         won BOOLEAN NOT NULL
                     )
                 """)
@@ -256,39 +279,33 @@ class UserStats:
     def add_game(self, user_id: str, won: bool):
         """Add a game result to the database."""
         try:
+            if not self.ensure_connection():
+                return
+
             print(f"Adding game for user {user_id}, won: {won}")
+            # Get current time in GMT+8
+            current_time = datetime.datetime.now(TIMEZONE)
+
             with self.conn.cursor() as cur:
                 cur.execute(
                     "INSERT INTO games (user_id, timestamp, won) VALUES (%s, %s, %s)",
-                    (user_id, datetime.datetime.now(), won)
+                    (user_id, current_time, won)
                 )
             self.conn.commit()
             print("Game added successfully!")
         except Exception as e:
             print(f"Error adding game: {e}")
-            # Try to reconnect if connection is lost
-            try:
-                self.conn = self.get_db_connection()
-                if self.conn:
-                    with self.conn.cursor() as cur:
-                        cur.execute(
-                            "INSERT INTO games (user_id, timestamp, won) VALUES (%s, %s, %s)",
-                            (user_id, datetime.datetime.now(), won)
-                        )
-                    self.conn.commit()
-                    print("Game added successfully after reconnection!")
-            except Exception as e2:
-                print(f"Error adding game after reconnection: {e2}")
 
     def get_monthly_stats(self):
-        """Get stats for the current month."""
+        """Get stats for the current month in GMT+8."""
         try:
-            if not self.conn or self.conn.closed:
-                self.conn = self.get_db_connection()
-                if not self.conn:
-                    return []
+            if not self.ensure_connection():
+                return []
 
-            current_month = datetime.datetime.now().strftime("%Y-%m")
+            # Get current time in GMT+8
+            current_time = datetime.datetime.now(TIMEZONE)
+            current_month = current_time.strftime("%Y-%m")
+
             with self.conn.cursor(cursor_factory=DictCursor) as cur:
                 cur.execute("""
                     SELECT
@@ -296,7 +313,7 @@ class UserStats:
                         COUNT(*) as games_played,
                         SUM(CASE WHEN won THEN 1 ELSE 0 END) as words_guessed
                     FROM games
-                    WHERE to_char(timestamp, 'YYYY-MM') = %s
+                    WHERE to_char(timestamp AT TIME ZONE 'Asia/Singapore', 'YYYY-MM') = %s
                     GROUP BY user_id
                     HAVING COUNT(*) > 0
                     ORDER BY words_guessed DESC
@@ -309,10 +326,8 @@ class UserStats:
     def get_overall_stats(self):
         """Get overall stats for all users."""
         try:
-            if not self.conn or self.conn.closed:
-                self.conn = self.get_db_connection()
-                if not self.conn:
-                    return []
+            if not self.ensure_connection():
+                return []
 
             with self.conn.cursor(cursor_factory=DictCursor) as cur:
                 cur.execute("""
@@ -333,7 +348,10 @@ class UserStats:
     def __del__(self):
         """Close database connection when object is destroyed."""
         if hasattr(self, 'conn') and self.conn:
-            self.conn.close()
+            try:
+                self.conn.close()
+            except:
+                pass
 
 # Create a global instance of UserStats
 user_stats = UserStats()
@@ -657,10 +675,13 @@ async def help_command(interaction: discord.Interaction):
 @bot.tree.command(name="leaderboard", description="View the server's overall Guessle leaderboard")
 async def leaderboard(interaction: discord.Interaction):
     try:
+        # Defer the response since this might take a while
+        await interaction.response.defer()
+
         overall_stats = user_stats.get_overall_stats()
 
         if not overall_stats:
-            await interaction.response.send_message("No games have been played yet!")
+            await interaction.followup.send("No games have been played yet!")
             return
 
         # Create leaderboard embed
@@ -685,23 +706,29 @@ async def leaderboard(interaction: discord.Interaction):
                 inline=False
             )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
     except Exception as e:
         print(f"Error in leaderboard command: {e}")
-        await interaction.response.send_message("❌ An error occurred while fetching the leaderboard. Please try again later.", ephemeral=True)
+        await interaction.followup.send("❌ An error occurred while fetching the leaderboard. Please try again later.", ephemeral=True)
 
 @bot.tree.command(name="monthly", description="View the server's monthly Guessle leaderboard")
 async def monthly_leaderboard(interaction: discord.Interaction):
     try:
+        # Defer the response since this might take a while
+        await interaction.response.defer()
+
         monthly_stats = user_stats.get_monthly_stats()
 
         if not monthly_stats:
-            await interaction.response.send_message("No games have been played this month!")
+            await interaction.followup.send("No games have been played this month!")
             return
+
+        # Get current time in GMT+8
+        current_time = datetime.datetime.now(TIMEZONE)
 
         # Create leaderboard embed
         embed = discord.Embed(
-            title=f"🏆 Monthly Guessle Leaderboard ({datetime.datetime.now().strftime('%Y-%m')})",
+            title=f"🏆 Monthly Guessle Leaderboard ({current_time.strftime('%Y-%m')})",
             color=discord.Color.blue()
         )
 
@@ -721,10 +748,10 @@ async def monthly_leaderboard(interaction: discord.Interaction):
                 inline=False
             )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
     except Exception as e:
         print(f"Error in monthly leaderboard command: {e}")
-        await interaction.response.send_message("❌ An error occurred while fetching the monthly leaderboard. Please try again later.", ephemeral=True)
+        await interaction.followup.send("❌ An error occurred while fetching the monthly leaderboard. Please try again later.", ephemeral=True)
 
 @bot.event
 async def on_command_error(ctx, error):
