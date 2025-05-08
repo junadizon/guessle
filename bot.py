@@ -480,6 +480,46 @@ async def is_valid_word(word: str) -> bool:
     except Exception:
         return False
 
+# QWERTY keyboard layout for letter tracker
+QWERTY_LAYOUT = [
+    ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+    ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+    ['Z', 'X', 'C', 'V', 'B', 'N', 'M']
+]
+
+def get_letter_tracker(guesses, correct_word):
+    """Generate a letter tracker based on previous guesses."""
+    # Initialize letter states: 0 = unused, 1 = wrong position, 2 = correct position
+    letter_states = {letter: 0 for letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'}
+
+    # Update letter states based on guesses
+    for guess in guesses:
+        for i, letter in enumerate(guess.upper()):
+            if letter == correct_word[i].upper():
+                letter_states[letter] = 2  # Correct position
+            elif letter in correct_word.upper() and letter_states[letter] != 2:
+                letter_states[letter] = 1  # Wrong position
+            elif letter_states[letter] == 0:
+                letter_states[letter] = -1  # Not in word
+
+    # Generate tracker display
+    tracker_lines = []
+    for row in QWERTY_LAYOUT:
+        line = []
+        for letter in row:
+            state = letter_states[letter]
+            if state == 2:  # Correct position
+                line.append(f"<:green_{letter.lower()}:1369661679494762637>")
+            elif state == 1:  # Wrong position
+                line.append(f"<:yellow_{letter.lower()}:1369662416857858088>")
+            elif state == -1:  # Not in word
+                line.append(f"<:gray_{letter.lower()}:1369661251235479552>")
+            else:  # Unused
+                line.append(letter)
+        tracker_lines.append(" ".join(line))
+
+    return "\n".join(tracker_lines)
+
 @bot.tree.command(name="guessle", description="Start a new Guessle game")
 async def start_guessle(interaction: discord.Interaction):
     if interaction.user.id in user_games:
@@ -526,11 +566,15 @@ async def guess_word(interaction: discord.Interaction, word: str):
     game["attempts"] += 1
     game["guesses"].append(guessed_word)
 
-    # Send private feedback with custom emojis and previous guesses
+    # Send private feedback with custom emojis, previous guesses, and letter tracker
     private_message = f"Attempt {game['attempts']} of 6:\n"
     # Show all previous guesses with custom emojis
     for guess in game["guesses"]:
         private_message += f"{get_feedback(guess, game['word'], show_word=True, use_custom_emojis=True)}\n"
+
+    # Add letter tracker
+    private_message += "\nLetter Tracker:\n"
+    private_message += get_letter_tracker(game["guesses"], game["word"])
 
     await interaction.response.send_message(private_message, ephemeral=True)
 
@@ -545,11 +589,13 @@ async def guess_word(interaction: discord.Interaction, word: str):
             public_message += f"{get_feedback(guess, game['word'], show_word=False)}\n"
         public_message += f"\nGuessed the word in {game['attempts']} attempts!"
 
-        # Create private message with custom emojis
+        # Create private message with custom emojis and letter tracker
         private_message = f"🎉 You won Guessle!\n\n"
         for guess in game["guesses"]:
             private_message += f"{get_feedback(guess, game['word'], show_word=True, use_custom_emojis=True)}\n"
-        private_message += f"\nThe word was `{game['word'].upper()}`"
+        private_message += f"\nThe word was `{game['word'].upper()}`\n\n"
+        private_message += "Final Letter Tracker:\n"
+        private_message += get_letter_tracker(game["guesses"], game["word"])
 
         await interaction.followup.send(public_message)
         await interaction.followup.send(private_message, ephemeral=True)
@@ -575,11 +621,13 @@ async def guess_word(interaction: discord.Interaction, word: str):
         for guess in game["guesses"]:
             public_message += f"{get_feedback(guess, game['word'], show_word=False)}\n"
 
-        # Create private message with custom emojis
+        # Create private message with custom emojis and letter tracker
         private_message = f"❌ You lost Guessle!\n\n"
         for guess in game["guesses"]:
             private_message += f"{get_feedback(guess, game['word'], show_word=True, use_custom_emojis=True)}\n"
-        private_message += f"\nThe word was `{game['word'].upper()}`"
+        private_message += f"\nThe word was `{game['word'].upper()}`\n\n"
+        private_message += "Final Letter Tracker:\n"
+        private_message += get_letter_tracker(game["guesses"], game["word"])
 
         await interaction.followup.send(public_message)
         await interaction.followup.send(private_message, ephemeral=True)
@@ -607,7 +655,11 @@ async def game_status(interaction: discord.Interaction):
     message = "Your current game status:\n\n"
     for guess in game["guesses"]:
         message += f"{get_feedback(guess, game['word'], show_word=False, use_custom_emojis=True)}\n"
-    message += f"\nYou're on attempt {game['attempts']} of 6."
+    message += f"\nYou're on attempt {game['attempts']} of 6.\n\n"
+
+    # Add letter tracker
+    message += "Letter Tracker:\n"
+    message += get_letter_tracker(game["guesses"], game["word"])
 
     await interaction.response.send_message(message, ephemeral=True)
 
