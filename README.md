@@ -78,7 +78,6 @@ If you encounter any issues or have questions, please open an issue in the repos
 Made with ❤️ by friedeggyolkie (Discord) / junadizon (GitHub)
 
 
-
 # Guessle Discord Bot - AWS EC2 Deployment Guide
 
 ## Table of Contents
@@ -107,7 +106,7 @@ Made with ❤️ by friedeggyolkie (Discord) / junadizon (GitHub)
 ### 1.2 Security Group Setup
 Create security group `guessle-bot-sg` with rules:
 - Inbound:
-  - SSH (22): Your IP
+  - SSH (22): 0.0.0.0/0
   - HTTP (8080): 0.0.0.0/0
   - HTTPS (443): 0.0.0.0/0
 - Outbound:
