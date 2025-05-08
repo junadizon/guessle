@@ -509,11 +509,11 @@ def get_letter_tracker(guesses, correct_word):
         for letter in row:
             state = letter_states[letter]
             if state == 2:  # Correct position
-                line.append(f"<:green_{letter.lower()}:1369661679494762637>")
+                line.append(EMOJI_MAP[f'green_{letter.lower()}'])
             elif state == 1:  # Wrong position
-                line.append(f"<:yellow_{letter.lower()}:1369662416857858088>")
+                line.append(EMOJI_MAP[f'yellow_{letter.lower()}'])
             elif state == -1:  # Not in word
-                line.append(f"<:gray_{letter.lower()}:1369661251235479552>")
+                line.append(EMOJI_MAP[f'gray_{letter.lower()}'])
             else:  # Unused
                 line.append(letter)
         tracker_lines.append(" ".join(line))
