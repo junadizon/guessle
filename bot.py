@@ -32,6 +32,34 @@ spell = SpellChecker()
 
 # Emoji mapping
 EMOJI_MAP = {
+    # Blue emojis
+    'blue_a': '<:blue_a:1370027777562120212>',
+    'blue_b': '<:blue_b:1370027794930598008>',
+    'blue_c': '<:blue_c:1370027809514328156>',
+    'blue_d': '<:blue_d:1370027825662267393>',
+    'blue_e': '<:blue_e:1370027832440258560>',
+    'blue_f': '<:blue_f:1370027887071203471>',
+    'blue_g': '<:blue_g:1370027925243564103>',
+    'blue_h': '<:blue_h:1370027973197037661>',
+    'blue_i': '<:blue_i:1370027985024979065>',
+    'blue_j': '<:blue_j:1370027996639137862>',
+    'blue_k': '<:blue_k:1370028010266427433>',
+    'blue_l': '<:blue_l:1370028023205724251>',
+    'blue_m': '<:blue_m:1370028033691357304>',
+    'blue_n': '<:blue_n:1370028044076584990>',
+    'blue_o': '<:blue_o:1370028053035483187>',
+    'blue_p': '<:blue_p:1370028082270048316>',
+    'blue_q': '<:blue_q:1370028092122206248>',
+    'blue_r': '<:blue_r:1370028102389862430>',
+    'blue_s': '<:blue_s:1370028112775221289>',
+    'blue_t': '<:blue_t:1370028123508445225>',
+    'blue_u': '<:blue_u:1370028143204896830>',
+    'blue_v': '<:blue_v:1370028152864247939>',
+    'blue_w': '<:blue_w:1370028162485977139>',
+    'blue_x': '<:blue_x:1370028174368313394>',
+    'blue_y': '<:blue_y:1370028196824748042>',
+    'blue_z': '<:blue_z:1370028234778873986>',
+
     # Yellow emojis
     'yellow_a': '<:yellow_a:1369662416857858088>',
     'yellow_b': '<:yellow_b:1369662427796476078>',
@@ -438,9 +466,9 @@ user_games = {}
 
 # QWERTY keyboard layout for letter tracker
 QWERTY_LAYOUT = [
-    ['<:blue_q:1370028092122206248>', '<:blue_w:1370028162485977139>', '<:blue_e:1370027832440258560>', '<:blue_r:1370028102389862430>', '<:blue_t:1370028123508445225>', '<:blue_y:1370028196824748042>', '<:blue_u:1370028143204896830>', '<:blue_i:1370027985024979065>', '<:blue_o:1370028053035483187>', '<:blue_p:1370028082270048316>'],
-    ['<:blue_a:1370027777562120212>', '<:blue_s:1370028112775221289>', '<:blue_d:1370027825662267393>', '<:blue_f:1370027887071203471>', '<:blue_g:1370027925243564103>', '<:blue_h:1370027973197037661>', '<:blue_j:1370027996639137862>', '<:blue_k:1370028010266427433>', '<:blue_l:1370028023205724251>'],
-    ['<:blue_z:1370028234778873986>', '<:blue_x:1370028174368313394>', '<:blue_c:1370027809514328156>', '<:blue_v:1370028152864247939>', '<:blue_b:1370027794930598008>', '<:blue_n:1370028044076584990>', '<:blue_m:1370028033691357304>']
+    ['blue_q', 'blue_w', 'blue_e', 'blue_r', 'blue_t', 'blue_y', 'blue_u', 'blue_i', 'blue_o', 'blue_p'],
+    ['blue_a', 'blue_s', 'blue_d', 'blue_f', 'blue_g', 'blue_h', 'blue_j', 'blue_k', 'blue_l'],
+    ['blue_z', 'blue_x', 'blue_c', 'blue_v', 'blue_b', 'blue_n', 'blue_m']
 ]
 
 def get_feedback(guess, correct, show_word=True, use_custom_emojis=False):
@@ -508,9 +536,9 @@ def get_letter_tracker(guesses, correct_word):
     tracker_lines = []
     for row in QWERTY_LAYOUT:
         line = []
-        for emoji in row:
-            # Extract letter from emoji name (e.g., 'blue_a' -> 'A')
-            letter = emoji.split('_')[1].upper()
+        for emoji_key in row:
+            # Extract letter from emoji key (e.g., 'blue_a' -> 'A')
+            letter = emoji_key.split('_')[1].upper()
             state = letter_states[letter]
             if state == 2:  # Correct position
                 line.append(EMOJI_MAP[f'green_{letter.lower()}'])
@@ -519,7 +547,7 @@ def get_letter_tracker(guesses, correct_word):
             elif state == -1:  # Not in word
                 line.append(EMOJI_MAP[f'gray_{letter.lower()}'])
             else:  # Unused (blue)
-                line.append(emoji)
+                line.append(EMOJI_MAP[emoji_key])
         tracker_lines.append(" ".join(line))
 
     return "\n".join(tracker_lines)
