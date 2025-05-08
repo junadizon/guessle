@@ -1,0 +1,15 @@
+[Unit]
+Description=Guessle Discord Bot
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/guessle-bot
+ExecStart=/usr/bin/python3 bot.py
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

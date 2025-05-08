@@ -283,6 +283,11 @@ class UserStats:
     def get_monthly_stats(self):
         """Get stats for the current month."""
         try:
+            if not self.conn or self.conn.closed:
+                self.conn = self.get_db_connection()
+                if not self.conn:
+                    return []
+
             current_month = datetime.datetime.now().strftime("%Y-%m")
             with self.conn.cursor(cursor_factory=DictCursor) as cur:
                 cur.execute("""
@@ -304,6 +309,11 @@ class UserStats:
     def get_overall_stats(self):
         """Get overall stats for all users."""
         try:
+            if not self.conn or self.conn.closed:
+                self.conn = self.get_db_connection()
+                if not self.conn:
+                    return []
+
             with self.conn.cursor(cursor_factory=DictCursor) as cur:
                 cur.execute("""
                     SELECT
@@ -646,67 +656,75 @@ async def help_command(interaction: discord.Interaction):
 
 @bot.tree.command(name="leaderboard", description="View the server's overall Guessle leaderboard")
 async def leaderboard(interaction: discord.Interaction):
-    overall_stats = user_stats.get_overall_stats()
+    try:
+        overall_stats = user_stats.get_overall_stats()
 
-    if not overall_stats:
-        await interaction.response.send_message("No games have been played yet!")
-        return
+        if not overall_stats:
+            await interaction.response.send_message("No games have been played yet!")
+            return
 
-    # Create leaderboard embed
-    embed = discord.Embed(
-        title="🏆 Overall Guessle Leaderboard",
-        color=discord.Color.gold()
-    )
-
-    # Add top 10 users to the leaderboard
-    for i, stats in enumerate(overall_stats[:10], 1):
-        try:
-            user = await bot.fetch_user(int(stats['user_id']))
-            username = user.name
-        except:
-            username = "Unknown User"
-
-        win_rate = (stats['words_guessed'] / stats['games_played'] * 100) if stats['games_played'] > 0 else 0
-
-        embed.add_field(
-            name=f"{i}. {username}",
-            value=f"Words Guessed: {stats['words_guessed']}\nGames Played: {stats['games_played']}\nWin Rate: {win_rate:.1f}%",
-            inline=False
+        # Create leaderboard embed
+        embed = discord.Embed(
+            title="🏆 Overall Guessle Leaderboard",
+            color=discord.Color.gold()
         )
 
-    await interaction.response.send_message(embed=embed)
+        # Add top 10 users to the leaderboard
+        for i, stats in enumerate(overall_stats[:10], 1):
+            try:
+                user = await bot.fetch_user(int(stats['user_id']))
+                username = user.name
+            except:
+                username = "Unknown User"
+
+            win_rate = (stats['words_guessed'] / stats['games_played'] * 100) if stats['games_played'] > 0 else 0
+
+            embed.add_field(
+                name=f"{i}. {username}",
+                value=f"Words Guessed: {stats['words_guessed']}\nGames Played: {stats['games_played']}\nWin Rate: {win_rate:.1f}%",
+                inline=False
+            )
+
+        await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        print(f"Error in leaderboard command: {e}")
+        await interaction.response.send_message("❌ An error occurred while fetching the leaderboard. Please try again later.", ephemeral=True)
 
 @bot.tree.command(name="monthly", description="View the server's monthly Guessle leaderboard")
 async def monthly_leaderboard(interaction: discord.Interaction):
-    monthly_stats = user_stats.get_monthly_stats()
+    try:
+        monthly_stats = user_stats.get_monthly_stats()
 
-    if not monthly_stats:
-        await interaction.response.send_message("No games have been played this month!")
-        return
+        if not monthly_stats:
+            await interaction.response.send_message("No games have been played this month!")
+            return
 
-    # Create leaderboard embed
-    embed = discord.Embed(
-        title=f"🏆 Monthly Guessle Leaderboard ({datetime.datetime.now().strftime('%Y-%m')})",
-        color=discord.Color.blue()
-    )
-
-    # Add top 10 users to the leaderboard
-    for i, stats in enumerate(monthly_stats[:10], 1):
-        try:
-            user = await bot.fetch_user(int(stats['user_id']))
-            username = user.name
-        except:
-            username = "Unknown User"
-
-        win_rate = (stats['words_guessed'] / stats['games_played'] * 100) if stats['games_played'] > 0 else 0
-
-        embed.add_field(
-            name=f"{i}. {username}",
-            value=f"Words Guessed: {stats['words_guessed']}\nGames Played: {stats['games_played']}\nWin Rate: {win_rate:.1f}%",
-            inline=False
+        # Create leaderboard embed
+        embed = discord.Embed(
+            title=f"🏆 Monthly Guessle Leaderboard ({datetime.datetime.now().strftime('%Y-%m')})",
+            color=discord.Color.blue()
         )
 
-    await interaction.response.send_message(embed=embed)
+        # Add top 10 users to the leaderboard
+        for i, stats in enumerate(monthly_stats[:10], 1):
+            try:
+                user = await bot.fetch_user(int(stats['user_id']))
+                username = user.name
+            except:
+                username = "Unknown User"
+
+            win_rate = (stats['words_guessed'] / stats['games_played'] * 100) if stats['games_played'] > 0 else 0
+
+            embed.add_field(
+                name=f"{i}. {username}",
+                value=f"Words Guessed: {stats['words_guessed']}\nGames Played: {stats['games_played']}\nWin Rate: {win_rate:.1f}%",
+                inline=False
+            )
+
+        await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        print(f"Error in monthly leaderboard command: {e}")
+        await interaction.response.send_message("❌ An error occurred while fetching the monthly leaderboard. Please try again later.", ephemeral=True)
 
 @bot.event
 async def on_command_error(ctx, error):
