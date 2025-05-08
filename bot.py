@@ -436,25 +436,34 @@ def get_random_word():
 
 user_games = {}
 
+# QWERTY keyboard layout for letter tracker
+QWERTY_LAYOUT = [
+    ['<:blue_q:1370028092122206248>', '<:blue_w:1370028162485977139>', '<:blue_e:1370027832440258560>', '<:blue_r:1370028102389862430>', '<:blue_t:1370028123508445225>', '<:blue_y:1370028196824748042>', '<:blue_u:1370028143204896830>', '<:blue_i:1370027985024979065>', '<:blue_o:1370028053035483187>', '<:blue_p:1370028082270048316>'],
+    ['<:blue_a:1370027777562120212>', '<:blue_s:1370028112775221289>', '<:blue_d:1370027825662267393>', '<:blue_f:1370027887071203471>', '<:blue_g:1370027925243564103>', '<:blue_h:1370027973197037661>', '<:blue_j:1370027996639137862>', '<:blue_k:1370028010266427433>', '<:blue_l:1370028023205724251>'],
+    ['<:blue_z:1370028234778873986>', '<:blue_x:1370028174368313394>', '<:blue_c:1370027809514328156>', '<:blue_v:1370028152864247939>', '<:blue_b:1370027794930598008>', '<:blue_n:1370028044076584990>', '<:blue_m:1370028033691357304>']
+]
+
 def get_feedback(guess, correct, show_word=True, use_custom_emojis=False):
     feedback = []
     correct_list = list(correct)
+
+    # Initialize with empty squares
+    empty_squares = ["◻️"] * 5
+    feedback = empty_squares.copy()
 
     # First pass: mark correct positions
     for i in range(5):
         if guess[i] == correct[i]:
             if use_custom_emojis:
                 emoji_key = f"green_{guess[i]}"
-                feedback.append(EMOJI_MAP.get(emoji_key, "🟩"))
+                feedback[i] = EMOJI_MAP.get(emoji_key, "🟩")
             else:
-                feedback.append("🟩")
+                feedback[i] = "🟩"
             correct_list[i] = None
-        else:
-            feedback.append(None)
 
     # Second pass: mark correct letters in wrong positions
     for i in range(5):
-        if feedback[i] is None:
+        if feedback[i] == "◻️":
             if guess[i] in correct_list:
                 if use_custom_emojis:
                     emoji_key = f"yellow_{guess[i]}"
@@ -469,7 +478,7 @@ def get_feedback(guess, correct, show_word=True, use_custom_emojis=False):
                 else:
                     feedback[i] = "⬛"
 
-    # Join with spaces
+    # Join with single space
     return " ".join(feedback)
 
 async def is_valid_word(word: str) -> bool:
@@ -480,16 +489,9 @@ async def is_valid_word(word: str) -> bool:
     except Exception:
         return False
 
-# QWERTY keyboard layout for letter tracker
-QWERTY_LAYOUT = [
-    ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
-    ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
-    ['Z', 'X', 'C', 'V', 'B', 'N', 'M']
-]
-
 def get_letter_tracker(guesses, correct_word):
     """Generate a letter tracker based on previous guesses."""
-    # Initialize letter states: 0 = unused, 1 = wrong position, 2 = correct position
+    # Initialize letter states: 0 = unused (blue), 1 = wrong position (yellow), 2 = correct position (green), -1 = not in word (gray)
     letter_states = {letter: 0 for letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'}
 
     # Update letter states based on guesses
@@ -506,7 +508,9 @@ def get_letter_tracker(guesses, correct_word):
     tracker_lines = []
     for row in QWERTY_LAYOUT:
         line = []
-        for letter in row:
+        for emoji in row:
+            # Extract letter from emoji name (e.g., 'blue_a' -> 'A')
+            letter = emoji.split('_')[1].upper()
             state = letter_states[letter]
             if state == 2:  # Correct position
                 line.append(EMOJI_MAP[f'green_{letter.lower()}'])
@@ -514,8 +518,8 @@ def get_letter_tracker(guesses, correct_word):
                 line.append(EMOJI_MAP[f'yellow_{letter.lower()}'])
             elif state == -1:  # Not in word
                 line.append(EMOJI_MAP[f'gray_{letter.lower()}'])
-            else:  # Unused
-                line.append(letter)
+            else:  # Unused (blue)
+                line.append(emoji)
         tracker_lines.append(" ".join(line))
 
     return "\n".join(tracker_lines)
